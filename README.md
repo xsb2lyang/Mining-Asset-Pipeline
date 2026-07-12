@@ -46,6 +46,7 @@ policy.
 - [SAM3 → SAM3D pipeline record](docs/sam3_to_sam3d_pipeline.md)
 - [USD conversion and physics pipeline record](docs/asset_usd_pipeline.md)
 - [Physics material parameter reference](docs/apply_physics_material.md)
+- [Legacy local workspace setup](docs/legacy_workspace_setup.md)
 
 ## License
 

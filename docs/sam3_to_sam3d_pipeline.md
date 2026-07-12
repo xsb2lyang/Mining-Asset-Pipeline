@@ -161,7 +161,7 @@ mug.glb : vertices=566790  faces=1134560
 
 | 决策 | 原因 |
 |---|---|
-| 两个环境分开跑 | `README_LOCAL.md` 指定 SAM3 在 `sam3`、SAM3D 在 `sam3d-objects`;两者 PyTorch 与 CUDA 版本不同 |
+| 两个环境分开跑 | [`legacy_workspace_setup.md`](legacy_workspace_setup.md) 记录 SAM3 在 `sam3`、SAM3D 在 `sam3d-objects`;两者 PyTorch 与 CUDA 版本不同 |
 | 不用 `load_from_HF=True` | 仓库已下好 `sam3.pt`(3.3 GB),免授权 |
 | SAM3D 用源代直跑 | 仓库 `sam3d_objects` 包没有 `pip install`,直接 `sys.path.append("notebook")` |
 | 强转 fp32 + 替换 fused kernel | 修复 bf16 / fp32 dtype 不匹配(详见第 6 节) |
@@ -351,7 +351,7 @@ conda run -n sam3d-objects python /home/user/Xsb_WS/Benchmark/Assest_maker/outpu
 
 | 来源 | 用途 |
 |---|---|
-| `Benchmark/Assest_maker/README_LOCAL.md` | 确认双环境、HF 权限与权重下载方式 |
+| [`docs/legacy_workspace_setup.md`](legacy_workspace_setup.md) | 确认双环境、HF 权限与权重下载方式 |
 | `Benchmark/Assest_maker/sam3/README.md` | SAM3 文本/视觉 prompt API 范式 |
 | `Benchmark/Assest_maker/sam-3d-objects/README.md` | SAM3D inference 接口、output 键含义 |
 | `Benchmark/Assest_maker/sam3/sam3/perflib/fused.py` | 找到 bf16 hard-cast 的源头 |
