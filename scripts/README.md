@@ -12,6 +12,7 @@ with Isaac Sim's `python.sh`, not the current conda Python.
 | `validate_asset.py` | Original stdout-based validator |
 | `run_sam3.py` | Create a text-conditioned mask from an RGB image (SAM3 env) |
 | `run_sam3d.py` | Reconstruct GLB/OBJ/PLY from an RGB image and mask (SAM3D env) |
+| `run_pipeline.py` | Unattended CLI: image + prompt → `final/asset.usd` (no human in the loop) |
 | `launch_asset_agent.py` | Launch the local human-in-the-loop Gradio asset-quality workflow |
 
 Example:
@@ -35,5 +36,20 @@ To create and review a complete asset bundle in a browser, run:
 python scripts/launch_asset_agent.py --output-root outputs
 ```
 
-See [the asset-quality workflow](../docs/asset_quality_agent.md) for the
-human approval and physics-confirmation stages.
+See [the asset-quality workflow](../docs/asset_quality_agent.md) for
+the human approval and physics-confirmation stages.
+
+To run the same pipeline end-to-end without launching the UI, use the
+unattended CLI:
+
+```bash
+python scripts/run_pipeline.py \
+  --image path/to/red_mug.jpg \
+  --prompt "a red mug" \
+  --asset-category cup
+```
+
+Exit codes: `0` complete (writes `final/asset.usd`) / `2` blocked
+(Author/Critic did not converge in 3 rounds) / `1` any other failure.
+`ISAAC_SIM_PATH` (env var or `--isaac-sim-path`) is required because the
+USD authoring stage invokes Isaac Sim's `python.sh`.
