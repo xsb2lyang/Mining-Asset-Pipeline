@@ -11,6 +11,23 @@ from .policy import REVIEW_ISSUES
 from .workflow import AssetWorkflow
 
 
+_PROGRESS = {
+    "created": ("1/5", "已创建资产目录，等待视觉生成"),
+    "visual_running": ("2/5", "正在运行 SAM3 / SAM3D 视觉生成"),
+    "review_required": ("3/5", "等待人工视觉审查"),
+    "visual_approved": ("3/5", "视觉资产已批准，正在准备物理建议"),
+    "physics_review_required": ("4/5", "等待人工确认材质与碰撞配置"),
+    "usd_running": ("5/5", "正在转换 USD 并写入基础物理属性"),
+    "complete": ("完成", "最终 USD 和报告已生成"),
+    "failed": ("已中断", "请查看事件记录和对应工具日志"),
+}
+
+
+def progress_markdown(manifest: dict[str, Any]) -> str:
+    stage, description = _PROGRESS.get(manifest["status"], ("未知", "未知状态"))
+    return f"## 当前进度：{stage}\n**阶段：** `{manifest['status']}`  \\n+**说明：** {description}"
+
+
 def _paths(workflow: AssetWorkflow, asset_id: str) -> dict[str, str | None]:
     manifest = workflow.summary(asset_id)
     root = workflow.store.root(asset_id)
@@ -18,6 +35,7 @@ def _paths(workflow: AssetWorkflow, asset_id: str) -> dict[str, str | None]:
     return {
         "source": str(root / manifest["source_image"]),
         "mask_preview": str(root / "visual" / "sam3" / "preview.png") if (root / "visual" / "sam3" / "preview.png").is_file() else None,
+        "mesh_preview": str(root / "visual" / "sam3d" / "preview.png") if (root / "visual" / "sam3d" / "preview.png").is_file() else None,
         "glb": str(root / artifacts["glb"]) if artifacts.get("glb") else None,
         "sam3_report": str(root / artifacts["sam3_report"]) if artifacts.get("sam3_report") else None,
         "geometry_report": str(root / artifacts["geometry_report"]) if artifacts.get("geometry_report") else None,
@@ -34,9 +52,11 @@ def _view(workflow: AssetWorkflow, asset_id: str) -> tuple[Any, ...]:
     events = "\n".join(f"- `{event['status']}` — {event['message']}" for event in manifest["events"][-8:])
     return (
         asset_id,
+        progress_markdown(manifest),
         manifest,
         paths["source"],
         paths["mask_preview"],
+        paths["mesh_preview"],
         paths["glb"],
         {"sam3": read(paths["sam3_report"]), "geometry": read(paths["geometry_report"]), "physics_proposal": read(paths["proposal"])},
         events,
@@ -52,6 +72,7 @@ def build_demo(workflow: AssetWorkflow):
     with gr.Blocks(title="Mining Asset Quality Agent") as demo:
         gr.Markdown("# Mining Asset Quality Agent\n创建资产、审查视觉结果，并在批准后确认 USD 物理配置。")
         asset_state = gr.State("")
+        progress = gr.Markdown("## 当前进度：未加载资产")
         with gr.Row():
             with gr.Column():
                 image = gr.Image(label="输入 RGB", type="filepath", sources=["upload"])
@@ -68,7 +89,8 @@ def build_demo(workflow: AssetWorkflow):
         with gr.Row():
             original = gr.Image(label="原始图像", interactive=False)
             mask = gr.Image(label="SAM3 Mask 预览", interactive=False)
-            model = gr.Model3D(label="SAM3D GLB 预览", clear_color=[0.1, 0.1, 0.1, 1.0])
+            mesh_preview = gr.Image(label="SAM3D 静态预览（审查主视图）", interactive=False)
+        model = gr.Model3D(label="SAM3D GLB 交互预览（浏览器 WebGL 不兼容时可忽略）", clear_color=[0.1, 0.1, 0.1, 1.0])
         reports = gr.JSON(label="自动检查与物理提议")
         with gr.Group():
             gr.Markdown("## 视觉人工审查")
@@ -84,7 +106,7 @@ def build_demo(workflow: AssetWorkflow):
             collision = gr.Dropdown(choices=collision_choices, value="open_container" if "open_container" in collision_choices else collision_choices[0], label="碰撞 profile")
             confirm = gr.Button("确认物理配置并生成 USD", variant="primary")
 
-        outputs = [asset_state, asset_id, manifest, original, mask, model, reports, events]
+        outputs = [asset_state, asset_id, progress, manifest, original, mask, mesh_preview, model, reports, events]
 
         def create_asset(image_path, prompt_value, category_value, task_value, constraints_value):
             if not image_path or not prompt_value or not prompt_value.strip():

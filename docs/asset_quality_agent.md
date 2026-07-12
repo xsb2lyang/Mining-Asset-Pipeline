@@ -21,7 +21,7 @@ python scripts/launch_asset_agent.py --output-root outputs
 ## 使用流程
 
 1. 上传 RGB，输入 prompt；资产类别、任务和机器人约束可选。
-2. Agent 创建唯一资产目录，运行 SAM3 与 SAM3D，并展示 mask、GLB 和自动检查报告。
+2. Agent 创建唯一资产目录，运行 SAM3 与 SAM3D，并展示 mask、离屏渲染的静态 mesh 预览、GLB 和自动检查报告。静态预览是人工审查主视图；浏览器的交互式 GLB 预览受 WebGL 能力影响，仅作为补充。
 3. 人工批准视觉资产；如拒绝，选择问题类别，并可提供修订 prompt、SAM3 候选编号或自由文本反馈。
 4. Agent 只执行受控修复：重选/重跑 SAM3，或使用新 seed 重跑 SAM3D。无法安全修复的问题会保留为人工待处理状态。
 5. 批准后，确认 Agent 提议的材质和碰撞 profile；随后自动生成视觉 USD、物理 USD 和静态检查报告。

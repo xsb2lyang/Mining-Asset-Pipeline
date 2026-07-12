@@ -41,6 +41,40 @@ DEFAULT_OUTPUT_ROOT = Path(os.environ.get("PIPELINE_OUTPUT_DIR", REPO_ROOT / "ou
 DEFAULT_SAM3D_DIR = Path(os.environ.get("SAM3D_DIR", REPO_ROOT / "third_party" / "sam-3d-objects"))
 
 
+def render_glb_preview(glb_path: Path, preview_path: Path) -> str | None:
+    """Render an image preview so review does not depend on browser WebGL."""
+    if not glb_path.is_file():
+        return None
+    try:
+        os.environ.setdefault("PYOPENGL_PLATFORM", "egl")
+        import pyrender
+        import trimesh
+
+        mesh_scene = trimesh.load(str(glb_path), force="scene")
+        bounds = mesh_scene.bounds
+        center = bounds.mean(axis=0)
+        extent = float((bounds[1] - bounds[0]).max())
+        if not np.isfinite(extent) or extent <= 0:
+            raise ValueError("invalid GLB bounds")
+        renderer = pyrender.OffscreenRenderer(640, 640)
+        try:
+            scene = pyrender.Scene.from_trimesh_scene(mesh_scene, bg_color=[245, 245, 245, 255])
+            camera = pyrender.PerspectiveCamera(yfov=np.pi / 3.0)
+            pose = np.eye(4)
+            pose[:3, 3] = center + np.array([0.0, 0.0, extent * 1.8])
+            scene.add(camera, pose=pose)
+            scene.add(pyrender.DirectionalLight(color=np.ones(3), intensity=3.0), pose=pose)
+            color, _ = renderer.render(scene)
+            Image.fromarray(color).save(preview_path)
+        finally:
+            renderer.delete()
+        print(f"[step2] wrote {preview_path}")
+        return str(preview_path)
+    except Exception as exc:
+        print(f"[step2] GLB preview failed: {exc!r}")
+        return None
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--image", type=Path, required=True)
@@ -191,11 +225,15 @@ def main() -> int:
         except Exception as e:
             print(f"[step2] PLY->OBJ fallback failed: {e!r}")
 
+    preview_path = args.out_dir / "preview.png"
+    preview = render_glb_preview(glb_path, preview_path) if glb_path else None
+
     summary = {
         "output_keys": sorted(out.keys()),
         "ply": str(ply_path) if ply_path else None,
         "glb": str(glb_path) if glb_path else None,
         "obj": str(obj_path) if obj_path else None,
+        "preview": preview,
         "mesh_used_source": mesh_used[0] if mesh_used else None,
     }
     with open(args.out_dir / "summary.json", "w") as f:
