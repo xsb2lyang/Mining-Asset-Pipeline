@@ -1,0 +1,63 @@
+# -----------------------------------------------------------------------------
+# Local runtimes, third-party checkouts, and gated model weights
+# These are installed or downloaded locally; do not commit them to this repo.
+# -----------------------------------------------------------------------------
+/Benchmark/simulator/
+/Benchmark/Assest_maker/checkpoints/
+/Benchmark/Assest_maker/sam3/
+/Benchmark/Assest_maker/sam-3d-objects/
+/Benchmark/isaac-sim-*.zip
+/external/
+/checkpoints/
+
+# -----------------------------------------------------------------------------
+# Generated pipeline assets and simulation outputs
+# Keep any future, intentionally versioned test fixtures under tests/fixtures/.
+# -----------------------------------------------------------------------------
+/Benchmark/Assest_maker/outputs/
+/outputs/
+/runs/
+/logs/
+/artifacts/
+*.usd
+*.usda
+*.usdc
+*.usdz
+*.glb
+*.obj
+*.ply
+
+# Small, deliberate regression fixtures may be versioned.
+!tests/
+!tests/fixtures/
+!tests/fixtures/**/*.usd
+!tests/fixtures/**/*.usda
+!tests/fixtures/**/*.glb
+!tests/fixtures/**/*.obj
+
+# -----------------------------------------------------------------------------
+# Python, notebooks, local configuration, and editor caches
+# -----------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*.so
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.ipynb_checkpoints/
+.venv/
+venv/
+.env
+.env.*
+.vscode/
+.idea/
+
+# Isaac Sim / Omniverse caches
+_build/
+_out/
+kit/cache/
+kit/logs/
+extscache/
+data/cache/
