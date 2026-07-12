@@ -20,7 +20,14 @@ from .storage import AssetStore
 
 
 class AssetWorkflow:
-    def __init__(self, repo_root: Path, output_root: Path | None = None, runner: ToolRunner | None = None, policy: RuleBasedPolicy | None = None) -> None:
+    def __init__(
+        self,
+        repo_root: Path,
+        output_root: Path | None = None,
+        runner: ToolRunner | None = None,
+        policy: RuleBasedPolicy | None = None,
+        critic_agent: PhysicsCriticAgent | None = None,
+    ) -> None:
         self.repo_root = repo_root.resolve()
         self.store = AssetStore(output_root or self.repo_root / "outputs")
         self.runner = runner or SubprocessToolRunner()
@@ -28,7 +35,7 @@ class AssetWorkflow:
         self.sam3_env = os.environ.get("SAM3_ENV", "sam3")
         self.sam3d_env = os.environ.get("SAM3D_ENV", "sam3d-objects")
         self.physics_author = PhysicsAuthorAgent()
-        self.physics_critic = PhysicsCriticAgent()
+        self.physics_critic = critic_agent or PhysicsCriticAgent()
         self.physics_review_max_rounds = 3
 
     def create_asset(self, source_image: Path, request: AssetRequest) -> str:

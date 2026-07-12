@@ -62,6 +62,21 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Rewrite --prompt through the rule-based rewriter before sending to SAM3",
     )
+    parser.add_argument(
+        "--use-llm-critic",
+        action="store_true",
+        help="Use the optional Claude physics critic; fall back to deterministic rules on any LLM error",
+    )
+    parser.add_argument(
+        "--anthropic-api-key",
+        default=os.environ.get("ANTHROPIC_API_KEY"),
+        help="Anthropic API key (defaults to $ANTHROPIC_API_KEY; never persisted)",
+    )
+    parser.add_argument(
+        "--anthropic-model",
+        default=os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-5-20250514"),
+        help="Claude model used with --use-llm-critic (defaults to $ANTHROPIC_MODEL or claude-sonnet-5-20250514)",
+    )
     parser.add_argument("--quiet", action="store_true", help="Only print final result lines, not per-stage progress")
     return parser.parse_args(argv)
 
@@ -97,6 +112,27 @@ def _print_failure_diagnostics(workflow: AssetWorkflow, asset_id: str) -> None:
             print(f"      [{severity}] {code}: {message}", file=sys.stderr)
 
 
+def _build_llm_critic(args: argparse.Namespace):
+    """Create the optional critic without making Anthropic a base dependency."""
+    if not args.use_llm_critic:
+        return None
+    if not args.anthropic_api_key:
+        print("LLM critic requested but no ANTHROPIC_API_KEY was provided; using deterministic critic.", file=sys.stderr)
+        return None
+    try:
+        import anthropic
+        from mining_asset_pipeline.agent.llm_critic import LLMCriticAgent
+    except ImportError:
+        print("LLM critic requested but the optional anthropic package is unavailable; using deterministic critic.", file=sys.stderr)
+        return None
+    try:
+        client = anthropic.Anthropic(api_key=args.anthropic_api_key)
+        return LLMCriticAgent(client=client, model=args.anthropic_model)
+    except Exception as exc:  # noqa: BLE001 - setup failure must not disable the deterministic pipeline.
+        print(f"LLM critic setup failed ({type(exc).__name__}); using deterministic critic.", file=sys.stderr)
+        return None
+
+
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
 
@@ -124,7 +160,11 @@ def main(argv: list[str] | None = None) -> int:
             print(f"[rewriter] {original_prompt!r} -> {args.prompt!r}", flush=True)
 
     os.environ["ISAAC_SIM_PATH"] = str(args.isaac_sim_path)
-    workflow = AssetWorkflow(repo_root=ROOT, output_root=args.output_root)
+    workflow = AssetWorkflow(
+        repo_root=ROOT,
+        output_root=args.output_root,
+        critic_agent=_build_llm_critic(args),
+    )
     workflow.sam3_env = args.sam3_env
     workflow.sam3d_env = args.sam3d_env
 

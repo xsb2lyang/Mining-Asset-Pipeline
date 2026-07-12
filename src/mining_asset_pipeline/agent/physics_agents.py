@@ -21,11 +21,12 @@ class PhysicsReview:
     accepted: bool
     findings: list[dict[str, str]]
     summary: str
+    policy: str = "deterministic_physics_critic_v1"
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "role": "physics_critic",
-            "policy": "deterministic_physics_critic_v1",
+            "policy": self.policy,
             "accepted": self.accepted,
             "summary": self.summary,
             "findings": self.findings,
