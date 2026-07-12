@@ -43,7 +43,7 @@ Prompt + RGB
 
 ## Legacy workspace migration
 
-`Benchmark/Assest_maker/asset_pipeline/isaac/` is the current source of the
-USD tools. It will be moved into `src/mining_asset_pipeline/usd/` after tests
-and compatibility entry points are established. The misspelled legacy path is
-kept temporarily to avoid breaking the proven local workflow.
+The USD tools now live in `src/mining_asset_pipeline/usd/`; their supported
+CLI entry points live in `scripts/`. The misspelled legacy path
+`Benchmark/Assest_maker/asset_pipeline/isaac/` contains compatibility wrappers
+so the proven local workflow and historical experiment notes continue to work.
