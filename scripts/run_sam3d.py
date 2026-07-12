@@ -51,6 +51,17 @@ def main() -> int:
     ap.add_argument("--seed", type=int, default=42)
     args = ap.parse_args()
 
+    # `Inference` expects to run from the SAM3D checkout. Resolve every path
+    # while still in the caller's working directory so relative CLI arguments
+    # remain valid after the later `os.chdir(args.sam3d_dir)`.
+    args.image = args.image.resolve()
+    args.mask_npz = args.mask_npz.resolve()
+    args.sam3d_dir = args.sam3d_dir.resolve()
+    if args.out_dir is not None:
+        args.out_dir = args.out_dir.resolve()
+    if args.checkpoint is not None:
+        args.checkpoint = args.checkpoint.resolve()
+
     if not args.image.is_file():
         raise FileNotFoundError(args.image)
     if not args.mask_npz.is_file():
