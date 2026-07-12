@@ -1,0 +1,5 @@
+# Conservative fallback for solid, non-container assets.
+name: generic_solid
+preferred_approximation: convexDecomposition
+notes:
+  - Confirm the approximation after inspecting the mesh.

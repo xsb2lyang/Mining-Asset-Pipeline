@@ -35,6 +35,7 @@ def main() -> int:
     ap.add_argument("--out-dir", type=Path, help="Defaults to $PIPELINE_OUTPUT_DIR/<image-stem>/sam3")
     ap.add_argument("--sam3-dir", type=Path, default=DEFAULT_SAM3_DIR)
     ap.add_argument("--checkpoint", type=Path, default=DEFAULT_CHECKPOINT)
+    ap.add_argument("--candidate-index", type=int, help="Select a SAM3 candidate instead of the highest score")
     args = ap.parse_args()
 
     if not args.image.is_file():
@@ -109,7 +110,9 @@ def main() -> int:
     for i, s in enumerate(scores_np):
         print(f"  - candidate[{i}] score={float(s):.3f} box={boxes_np[i].tolist()}")
 
-    best = int(np.argmax(scores_np))
+    best = int(np.argmax(scores_np)) if args.candidate_index is None else args.candidate_index
+    if best < 0 or best >= len(scores_np):
+        raise ValueError(f"--candidate-index must be in [0, {len(scores_np) - 1}]")
     mask = masks_np[best] > 0
 
     np.savez(
@@ -118,6 +121,8 @@ def main() -> int:
         boxes=boxes_np,
         scores=scores_np,
         best_index=best,
+        selected_index=best,
+        candidate_masks=(masks_np > 0).astype(np.uint8),
         prompt=np.array(args.prompt),
     )
     print(f"[SAM3] wrote {out_npz}")

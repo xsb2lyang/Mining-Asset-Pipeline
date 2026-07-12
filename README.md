@@ -12,8 +12,9 @@ Prompt + RGB → SAM3 mask → SAM3D GLB → USD → rigid body/collision/mass
              → physics material → static schema validation
 ```
 
-The next milestones are automated geometry validation, collision selection,
-and dynamic drop/push/grasp/stack regression tests.
+The first human-gated asset-quality agent now orchestrates visual generation,
+visual review, USD authoring, and baseline physics configuration. Dynamic
+drop/push/grasp/stack regression tests remain the next Loop 2 milestone.
 
 ## Repository layout
 
@@ -46,6 +47,7 @@ policy.
 - [SAM3 → SAM3D pipeline record](docs/sam3_to_sam3d_pipeline.md)
 - [USD conversion and physics pipeline record](docs/asset_usd_pipeline.md)
 - [Physics material parameter reference](docs/apply_physics_material.md)
+- [Asset Quality Agent workflow](docs/asset_quality_agent.md)
 - [Red mug end-to-end validation](docs/e2e_red_mug_validation.md)
 - [Legacy local workspace setup](docs/legacy_workspace_setup.md)
 

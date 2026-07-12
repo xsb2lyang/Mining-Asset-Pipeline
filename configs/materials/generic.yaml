@@ -1,0 +1,8 @@
+# Conservative fallback. A human must confirm this profile before use.
+name: generic
+density_kg_m3: 1000
+static_friction: 0.5
+dynamic_friction: 0.4
+restitution: 0.05
+friction_combine_mode: average
+restitution_combine_mode: average

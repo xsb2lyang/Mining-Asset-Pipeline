@@ -23,11 +23,14 @@ class RepositoryLayoutTests(unittest.TestCase):
             "scripts/launch_isaac_sim.sh",
             "scripts/run_sam3.py",
             "scripts/run_sam3d.py",
+            "scripts/launch_asset_agent.py",
+            "src/mining_asset_pipeline/agent/workflow.py",
         ):
             self.assertTrue((ROOT / relative_path).is_file(), relative_path)
 
     def test_usd_tools_are_syntax_valid(self) -> None:
         sources = list((ROOT / "src/mining_asset_pipeline/usd").glob("*.py"))
+        sources.extend((ROOT / "src/mining_asset_pipeline/agent").glob("*.py"))
         sources.extend((ROOT / "scripts").glob("*.py"))
         for source in sorted(sources):
             py_compile.compile(str(source), doraise=True)
