@@ -43,11 +43,12 @@ class RuleBasedPolicy:
             "policy": "rule_based_v1",
             "material_profile": "ceramic" if is_ceramic else None,
             "collision_profile": "open_container" if is_container else None,
-            "requires_human_selection": not (is_container and is_ceramic),
+            "requires_human_selection": False,
+            "uses_conservative_fallback": not (is_container and is_ceramic),
             "rationale": (
                 "Prompt/category indicates a ceramic open container; preserve its cavity with SDF collision."
                 if is_container and is_ceramic
-                else "Prompt/category is insufficient to safely infer both material and collision profiles."
+                else "Prompt/category is insufficient to infer a specialised profile; use traceable generic defaults and flag the assumption."
             ),
         }
 

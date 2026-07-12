@@ -11,21 +11,23 @@ from .workflow import AssetWorkflow
 
 
 _PROGRESS = {
-    "created": ("1/5", "已创建资产目录，等待视觉生成"),
-    "visual_running": ("2/5", "正在运行 SAM3 / SAM3D 视觉生成"),
-    "review_required": ("3/5", "等待人工视觉审查"),
-    "visual_approved": ("3/5", "视觉资产已批准，正在准备物理建议"),
-    "physics_review_required": ("4/5", "等待人工确认材质与碰撞配置"),
-    "usd_running": ("5/5", "正在转换 USD 并写入基础物理属性"),
+    "created": ("1/6", "已创建资产目录，等待视觉生成"),
+    "visual_running": ("2/6", "正在运行 SAM3 / SAM3D 视觉生成"),
+    "review_required": ("3/6", "等待人工视觉审查"),
+    "visual_approved": ("3/6", "视觉资产已批准，正在启动物理子代理审查"),
+    "physics_review_running": ("4/6", "Physics Author 与 Physics Critic 正在生成、审查物理规格"),
+    "physics_review_required": ("4/6", "旧任务等待物理确认；新任务不会进入此状态"),
+    "usd_running": ("5/6", "物理规格已通过审查，正在转换 USD 并写入属性"),
     "complete": ("完成", "最终 USD 和报告已生成"),
     "failed": ("已中断", "请查看事件记录和对应工具日志"),
+    "blocked": ("已阻塞", "物理子代理在限定轮数内无法收敛；未执行 USD 物理化"),
 }
 
 _PROGRESS_STEPS: list[str] = [
     "created",
     "visual_running",
     "review_required",
-    "physics_review_required",
+    "physics_review_running",
     "usd_running",
     "complete",
 ]
@@ -34,7 +36,7 @@ _STEP_LABELS: dict[str, str] = {
     "created": "创建",
     "visual_running": "视觉生成",
     "review_required": "视觉审查",
-    "physics_review_required": "物理确认",
+    "physics_review_running": "物理审查",
     "usd_running": "USD 化",
     "complete": "完成",
 }
@@ -50,13 +52,13 @@ def progress_markdown(manifest: dict[str, Any]) -> str:
 def _render_progress_svg(manifest: dict[str, Any]) -> str:
     """Render a 6-step linear progress bar as inline SVG."""
     status = manifest["status"]
-    failed = status == "failed"
+    failed = status in {"failed", "blocked"}
 
     if failed:
         events = manifest.get("events", [])
         prev_status = None
         for event in events:
-            if event.get("status") == "failed":
+            if event.get("status") in {"failed", "blocked"}:
                 break
             prev_status = event.get("status")
         if prev_status in _PROGRESS_STEPS:
@@ -192,6 +194,7 @@ def _paths(workflow: AssetWorkflow, asset_id: str) -> dict[str, str | None]:
         "sam3_report": str(root / artifacts["sam3_report"]) if artifacts.get("sam3_report") else None,
         "geometry_report": str(root / artifacts["geometry_report"]) if artifacts.get("geometry_report") else None,
         "proposal": str(root / artifacts["physics_proposal"]) if artifacts.get("physics_proposal") else None,
+        "physics_spec": str(root / artifacts["physics_spec"]) if artifacts.get("physics_spec") else None,
     }
 
 
@@ -203,6 +206,12 @@ def _view(workflow: AssetWorkflow, asset_id: str) -> tuple[Any, ...]:
     def read(path: str | None) -> dict[str, Any] | None:
         return json.loads(Path(path).read_text(encoding="utf-8")) if path else None
 
+    def read_yaml(path: str | None) -> dict[str, Any] | None:
+        if not path:
+            return None
+        import yaml
+        return yaml.safe_load(Path(path).read_text(encoding="utf-8"))
+
     events_lines: list[str] = []
     for event in manifest["events"][-8:]:
         events_lines.append(f"- `{event['status']}` — {event['message']}")
@@ -211,6 +220,12 @@ def _view(workflow: AssetWorkflow, asset_id: str) -> tuple[Any, ...]:
         events_lines.append(f"**最近错误：** {manifest['error']}")
     events_md = "\n".join(events_lines) if events_lines else "（暂无事件）"
 
+    review_paths = [
+        root / value for key, value in manifest.get("artifacts", {}).items()
+        if key.startswith("physics_review_") and isinstance(value, str)
+    ]
+    review_paths.sort()
+    physics_reviews = [json.loads(path.read_text(encoding="utf-8")) for path in review_paths if path.is_file()]
     tail = _tail_log(workflow, asset_id) if manifest["status"] == "failed" else ""
 
     return (
@@ -221,7 +236,13 @@ def _view(workflow: AssetWorkflow, asset_id: str) -> tuple[Any, ...]:
         paths["mask_preview"],
         paths["mesh_preview"],
         paths["glb"],
-        {"sam3": read(paths["sam3_report"]), "geometry": read(paths["geometry_report"]), "physics_proposal": read(paths["proposal"])},
+        {
+            "sam3": read(paths["sam3_report"]),
+            "geometry": read(paths["geometry_report"]),
+            "physics_proposal": read(paths["proposal"]),
+            "physics_spec": read_yaml(paths["physics_spec"]),
+            "physics_critic_reviews": physics_reviews,
+        },
         events_md,
         tail,
     )
@@ -267,11 +288,8 @@ def build_demo(workflow: AssetWorkflow):
     """Return a Gradio Blocks application without starting a server."""
     import gradio as gr
 
-    material_choices = sorted(workflow._material_profiles())
-    collision_choices = sorted(workflow._collision_profiles())
-
     with gr.Blocks(title="Mining Asset Quality Agent") as demo:
-        gr.Markdown("# Mining Asset Quality Agent\n创建资产、审查视觉结果，并在批准后确认 USD 物理配置。")
+        gr.Markdown("# Mining Asset Quality Agent\n创建资产、审查视觉结果。通过后由 Physics Author / Critic 自动审查规格并生成 USD。")
         asset_state = gr.State("")
         progress = gr.Markdown("## 当前进度：未加载资产")
         progress_svg = gr.HTML(value="", label="进度")
@@ -293,7 +311,7 @@ def build_demo(workflow: AssetWorkflow):
             mask = gr.Image(label="SAM3 Mask 预览", interactive=False)
             mesh_preview = gr.Image(label="SAM3D 静态预览（审查主视图）", interactive=False)
         model = gr.Model3D(label="SAM3D GLB 交互预览（可鼠标拖拽旋转；WebGL 不兼容时忽略）", clear_color=[0.1, 0.1, 0.1, 1.0])
-        reports = gr.JSON(label="自动检查与物理提议")
+        reports = gr.JSON(label="自动检查、物理规格与子代理审查")
         with gr.Group():
             gr.Markdown("## 视觉人工审查")
             approve = gr.Button("批准视觉资产", variant="primary")
@@ -303,10 +321,7 @@ def build_demo(workflow: AssetWorkflow):
             candidate_index = gr.Number(label="SAM3 候选编号（可选）", precision=0)
             reject = gr.Button("提交反馈并执行受控修复")
         with gr.Group():
-            gr.Markdown("## 物理配置确认")
-            material = gr.Dropdown(choices=material_choices, value="ceramic" if "ceramic" in material_choices else material_choices[0], label="材质 profile")
-            collision = gr.Dropdown(choices=collision_choices, value="open_container" if "open_container" in collision_choices else collision_choices[0], label="碰撞 profile")
-            confirm = gr.Button("确认物理配置并生成 USD", variant="primary")
+            gr.Markdown("## 自动物理规格审查\n视觉批准后，Physics Author 会写入 `physics/physics_spec.yaml`，Physics Critic 会逐轮校验；只有通过后才会执行 USD 物理化。")
         with gr.Accordion("运行日志与失败诊断", open=False):
             with gr.Row():
                 refresh_btn = gr.Button("刷新日志")
@@ -362,10 +377,13 @@ def build_demo(workflow: AssetWorkflow):
             if not value:
                 raise gr.Error("请先创建或加载资产")
             try:
-                workflow.submit_review(value, ReviewDecision(approved=True))
+                workflow.begin_physics_review(value)
+                yield asset_ui_update(workflow, value)
+                workflow.run_physics_pipeline(value)
             except (RuntimeError, ValueError) as exc:
+                yield asset_ui_update(workflow, value)
                 raise gr.Error(_format_runtime_error("视觉审查", value, exc, workflow))
-            return asset_ui_update(workflow, value)
+            yield asset_ui_update(workflow, value)
 
         def _safe_reject(value, issue_value, feedback_value, prompt_value, candidate_value):
             if not value:
@@ -381,15 +399,6 @@ def build_demo(workflow: AssetWorkflow):
                 ))
             except (RuntimeError, ValueError) as exc:
                 raise gr.Error(_format_runtime_error("反馈修复", value, exc, workflow))
-            return asset_ui_update(workflow, value)
-
-        def _safe_confirm(value, material_value, collision_value):
-            if not value:
-                raise gr.Error("请先创建或加载资产")
-            try:
-                workflow.confirm_physics(value, material_value, collision_value)
-            except (RuntimeError, ValueError) as exc:
-                raise gr.Error(_format_runtime_error("USD 物理化", value, exc, workflow))
             return asset_ui_update(workflow, value)
 
         def _refresh_log(value, enabled=True):
@@ -413,7 +422,6 @@ def build_demo(workflow: AssetWorkflow):
         load.click(_safe_load, [asset_id], asset_outputs, queue=False)
         approve.click(_safe_approve, [asset_state], asset_outputs, concurrency_limit=1, concurrency_id="asset_gpu")
         reject.click(_safe_reject, [asset_state, issue, feedback, revised_prompt, candidate_index], asset_outputs, concurrency_limit=1, concurrency_id="asset_gpu")
-        confirm.click(_safe_confirm, [asset_state, material, collision], asset_outputs, concurrency_limit=1, concurrency_id="asset_gpu")
         refresh_btn.click(_refresh_log, [asset_state], [log_stream])
         list_refresh.click(_refresh_list, outputs=[asset_list])
         asset_list.select(_on_select_asset, outputs=[asset_id])

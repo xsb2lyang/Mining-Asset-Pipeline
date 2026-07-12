@@ -1,4 +1,4 @@
-# Conservative fallback. A human must confirm this profile before use.
+# Conservative, traceable fallback when prompt semantics are insufficient.
 name: generic
 density_kg_m3: 1000
 static_friction: 0.5

@@ -1,0 +1,38 @@
+# Per-asset physics specification contract.  The Author writes a resolved copy to
+# outputs/<asset-id>/physics/physics_spec.yaml before invoking USD tools.
+schema_version: 1
+author:
+  role: physics_author
+  policy: deterministic_physics_author_v1
+asset:
+  prompt: ""
+  category: unspecified
+  target_task: ""
+  robot_constraints: ""
+material:
+  profile: generic
+  density_kg_m3: 1000.0
+  static_friction: 0.5
+  dynamic_friction: 0.4
+  restitution: 0.05
+  friction_combine_mode: average
+  restitution_combine_mode: average
+mass:
+  # Select exactly one mode. prepare_physics.py receives --density or --mass.
+  mode: density
+  density_kg_m3: 1000.0
+  # mass_kg: null
+collision:
+  profile: generic_solid
+  enabled: true
+  approximation: convexDecomposition # convexHull | convexDecomposition | sdf
+  fallback_approximation: null
+  production_strategy: single_collider
+rigid_body:
+  enabled: true
+  enable_ccd: true
+  disable_gravity: false
+  linear_damping: 0.0
+  angular_damping: 0.0
+assumptions: []
+rationale: ""

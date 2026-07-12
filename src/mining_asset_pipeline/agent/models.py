@@ -11,6 +11,9 @@ class AssetStatus(str, Enum):
     VISUAL_RUNNING = "visual_running"
     REVIEW_REQUIRED = "review_required"
     VISUAL_APPROVED = "visual_approved"
+    PHYSICS_REVIEW_RUNNING = "physics_review_running"
+    BLOCKED = "blocked"
+    # Legacy state retained to make previously written manifests readable.
     PHYSICS_REVIEW_REQUIRED = "physics_review_required"
     USD_RUNNING = "usd_running"
     COMPLETE = "complete"
@@ -51,9 +54,11 @@ VALID_TRANSITIONS: dict[AssetStatus, set[AssetStatus]] = {
     AssetStatus.CREATED: {AssetStatus.VISUAL_RUNNING, AssetStatus.FAILED},
     AssetStatus.VISUAL_RUNNING: {AssetStatus.REVIEW_REQUIRED, AssetStatus.FAILED},
     AssetStatus.REVIEW_REQUIRED: {AssetStatus.VISUAL_RUNNING, AssetStatus.VISUAL_APPROVED, AssetStatus.FAILED},
-    AssetStatus.VISUAL_APPROVED: {AssetStatus.PHYSICS_REVIEW_REQUIRED, AssetStatus.FAILED},
+    AssetStatus.VISUAL_APPROVED: {AssetStatus.PHYSICS_REVIEW_RUNNING, AssetStatus.PHYSICS_REVIEW_REQUIRED, AssetStatus.FAILED},
+    AssetStatus.PHYSICS_REVIEW_RUNNING: {AssetStatus.USD_RUNNING, AssetStatus.BLOCKED, AssetStatus.FAILED},
     AssetStatus.PHYSICS_REVIEW_REQUIRED: {AssetStatus.USD_RUNNING, AssetStatus.REVIEW_REQUIRED, AssetStatus.FAILED},
     AssetStatus.USD_RUNNING: {AssetStatus.COMPLETE, AssetStatus.FAILED},
     AssetStatus.COMPLETE: set(),
     AssetStatus.FAILED: {AssetStatus.VISUAL_RUNNING},
+    AssetStatus.BLOCKED: set(),
 }

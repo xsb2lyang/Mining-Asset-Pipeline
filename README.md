@@ -12,8 +12,9 @@ Prompt + RGB → SAM3 mask → SAM3D GLB → USD → rigid body/collision/mass
              → physics material → static schema validation
 ```
 
-The first human-gated asset-quality agent now orchestrates visual generation,
-visual review, USD authoring, and baseline physics configuration. Dynamic
+The asset-quality agent now uses a human gate only for visual review, then runs
+a bounded Physics Author/Critic review before USD authoring and baseline
+physics configuration. Dynamic
 drop/push/grasp/stack regression tests remain the next Loop 2 milestone.
 
 ## Repository layout

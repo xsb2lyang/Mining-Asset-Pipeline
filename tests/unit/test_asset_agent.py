@@ -18,6 +18,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from mining_asset_pipeline.agent.models import AssetRequest, AssetStatus, ReviewDecision, ToolResult
 from mining_asset_pipeline.agent.inspection import inspect_sam3, select_sam3_candidate
+from mining_asset_pipeline.agent.physics_agents import PhysicsAuthorAgent, PhysicsCriticAgent
 from mining_asset_pipeline.agent.policy import RuleBasedPolicy
 from mining_asset_pipeline.agent.storage import AssetStore
 from mining_asset_pipeline.agent.workflow import AssetWorkflow
@@ -84,7 +85,7 @@ class AssetStoreTests(unittest.TestCase):
 
 
 class WorkflowTests(unittest.TestCase):
-    def test_review_repair_then_physics_confirmation_completes(self) -> None:
+    def test_review_repair_then_automatic_physics_review_completes(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             temp_root = Path(temp)
             image = temp_root / "red_mug.jpg"
@@ -98,12 +99,15 @@ class WorkflowTests(unittest.TestCase):
             rerun = workflow.submit_review(asset_id, ReviewDecision(approved=False, issue="shape_incorrect"))
             self.assertEqual(rerun["status"], AssetStatus.REVIEW_REQUIRED.value)
             self.assertTrue((workflow.store.root(asset_id) / "history" / "visual_001").is_dir())
-            proposed = workflow.submit_review(asset_id, ReviewDecision(approved=True))
-            self.assertEqual(proposed["status"], AssetStatus.PHYSICS_REVIEW_REQUIRED.value)
             with patch.dict(os.environ, {"ISAAC_SIM_PATH": str(isaac)}):
-                complete = workflow.confirm_physics(asset_id, "ceramic", "open_container")
+                complete = workflow.submit_review(asset_id, ReviewDecision(approved=True))
             self.assertEqual(complete["status"], AssetStatus.COMPLETE.value)
             self.assertTrue((workflow.store.root(asset_id) / "final" / "asset.usd").is_file())
+            spec = (workflow.store.root(asset_id) / "physics" / "physics_spec.yaml").read_text(encoding="utf-8")
+            self.assertIn("profile: ceramic", spec)
+            self.assertIn("approximation: sdf", spec)
+            review = workflow.store.read_json(workflow.store.root(asset_id) / "physics" / "physics_review_001.json")
+            self.assertTrue(review["accepted"])
             for artifact in complete["artifacts"].values():
                 self.assertFalse(Path(artifact).is_absolute())
 
@@ -126,6 +130,22 @@ class PolicyTests(unittest.TestCase):
         proposal = RuleBasedPolicy().physics_proposal(AssetRequest(prompt="red ceramic mug"))
         self.assertEqual(proposal["material_profile"], "ceramic")
         self.assertEqual(proposal["collision_profile"], "open_container")
+
+
+class PhysicsAgentTests(unittest.TestCase):
+    def test_critic_rejects_sealing_a_container_and_author_repairs_it(self) -> None:
+        materials = {"ceramic": {"density_kg_m3": 2500, "static_friction": 0.5, "dynamic_friction": 0.4, "restitution": 0.05}}
+        collisions = {"open_container": {"preferred_approximation": "sdf"}}
+        author = PhysicsAuthorAgent()
+        spec = author.initial_spec(AssetRequest(prompt="ceramic mug"), {"material_profile": "ceramic", "collision_profile": "open_container"}, materials, collisions)
+        spec["collision"]["approximation"] = "convexHull"
+        critic = PhysicsCriticAgent()
+        first_review = critic.review(spec)
+        self.assertFalse(first_review.accepted)
+        self.assertIn("collision.container_sealed", {item["code"] for item in first_review.findings})
+        revised = author.revise(spec, first_review.findings)
+        self.assertEqual(revised["collision"]["approximation"], "sdf")
+        self.assertTrue(critic.review(revised).accepted)
 
 
 class InspectionTests(unittest.TestCase):
