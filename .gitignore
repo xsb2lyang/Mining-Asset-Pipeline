@@ -21,6 +21,7 @@
 /runs/
 /logs/
 /artifacts/
+/textures/
 *.usd
 *.usda
 *.usdc
