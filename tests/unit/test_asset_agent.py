@@ -36,6 +36,9 @@ def _glb_bytes() -> bytes:
 
 class FakeRunner:
     def run(self, name, command, cwd, log_path, env=None):
+        return self.stream(name, command, cwd, log_path, env)
+
+    def stream(self, name, command, cwd, log_path, env=None):
         log_path.parent.mkdir(parents=True, exist_ok=True)
         log_path.write_text("fake tool completed\n", encoding="utf-8")
         def value(flag: str) -> Path:

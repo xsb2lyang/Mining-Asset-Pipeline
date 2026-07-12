@@ -166,7 +166,11 @@ class AssetWorkflow:
         return self.store.manifest(asset_id)
 
     def _run_or_fail(self, asset_id: str, name: str, command: list[str], log_path: Path, isaac: bool = False) -> None:
-        result = self.runner.run(name, command, self.repo_root, log_path, isaac_clean_environment() if isaac else None)
+        env = isaac_clean_environment() if isaac else None
+        if hasattr(self.runner, "stream"):
+            result = self.runner.stream(name, command, self.repo_root, log_path, env)
+        else:
+            result = self.runner.run(name, command, self.repo_root, log_path, env)
         self.store.set_artifact(asset_id, f"{name}_log", log_path)
         if result.returncode != 0:
             self.store.fail(asset_id, f"{name} failed; read {self.store.relative(asset_id, log_path)}")
