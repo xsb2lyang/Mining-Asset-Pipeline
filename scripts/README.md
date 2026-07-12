@@ -13,6 +13,7 @@ with Isaac Sim's `python.sh`, not the current conda Python.
 | `run_sam3.py` | Create a text-conditioned mask from an RGB image (SAM3 env) |
 | `run_sam3d.py` | Reconstruct GLB/OBJ/PLY from an RGB image and mask (SAM3D env) |
 | `run_pipeline.py` | Unattended CLI: image + prompt → `final/asset.usd` (no human in the loop) |
+| `batch_pipeline.py` | Batch wrapper: JSON manifest → one independent USD asset per entry + summary JSON |
 | `launch_asset_agent.py` | Launch the local human-in-the-loop Gradio asset-quality workflow |
 
 Example:
