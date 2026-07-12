@@ -197,6 +197,7 @@ python scripts/run_pipeline.py \
 | `--isaac-sim-path` | `$ISAAC_SIM_PATH` | Isaac Sim 安装目录（含 python.sh） |
 | `--sam3-env` | `sam3` | SAM3 的 conda 环境名 |
 | `--sam3d-env` | `sam3d-objects` | SAM3D 的 conda 环境名 |
+| `--rewrite-prompt` | false | 用规则改写 `--prompt` 后再喂给 SAM3（见 §4.5） |
 | `--quiet` | false | 只打最终结果，不打阶段进度 |
 
 退出码：
@@ -231,10 +232,36 @@ Physics Author/Critic did not converge within 3 rounds; status=blocked; USD was 
 
 | 限制 | 影响 | 缓解 |
 |---|---|---|
-| SAM3 对抽象 prompt 不友好 | "a platform trolley" → 0 candidates | 改具体描述（"a flatbed cart with handle and wheels"） |
+| SAM3 对抽象 prompt 不友好 | "a platform trolley" → 0 candidates | 加 `--rewrite-prompt` 启用规则改写（见 §4.5），或改具体描述 |
 | `policy.physics_proposal` 是规则化推断 | 非 cup/mug 类物体可能落到 generic profile | 后续可加 `--material` / `--collision` flag 显式覆盖 |
 | 与 Gradio UI 共享 `outputs/` | 并发会冲突 | 后续可加 CLI 专属 `--output-root` 默认值 |
 | Isaac Sim 子进程依赖真实环境 | 单测用 `FakeRunner` + 占位 `python.sh` 模拟 | 见 `tests/unit/test_cli_pipeline.py` |
+
+### 4.5 Prompt 改写（缓解 SAM3 抽象 prompt 脆弱性）
+
+`--rewrite-prompt` flag 启用一个**纯函数、无 LLM 依赖**的关键词映射，
+把抽象/领域名词改成 SAM3 训练时见过的具体描述。
+
+```bash
+# 原本会 0 candidates
+python scripts/run_pipeline.py \
+  --image ... --prompt "a platform trolley" --asset-category trolley
+# 输出：[rewriter] 'a platform trolley' -> 'a flatbed cart with handle and wheels'
+# 然后 SAM3 用改写后的 prompt 跑
+```
+
+映射表覆盖常用矿业/容器/工具关键词：trolley / cart / drill / excavator /
+ore / rock / bucket / container / hammer / pipe / ... 共 30+ 条。
+
+源代码：`src/mining_asset_pipeline/agent/prompt_rewriter.py`
+单测：`tests/unit/test_prompt_rewriter.py`（覆盖命中、case-insensitive、
+whole-word 避免 substring 误命中、空输入 fallback 等）
+
+**何时升级到 LLM**：当 `--rewrite-prompt` 仍命中不到你想用的名词时，
+调用方可以传入更具体的 `--prompt`，或者后续接入 Claude API 做
+semantic rewrite（接口已经留好——只换 `rewrite_prompt()` 内部即可）。
+
+---
 
 ---
 

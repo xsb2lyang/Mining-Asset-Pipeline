@@ -27,6 +27,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from mining_asset_pipeline.agent.models import AssetRequest, AssetStatus, ReviewDecision  # noqa: E402
+from mining_asset_pipeline.agent.prompt_rewriter import rewrite_prompt  # noqa: E402
 from mining_asset_pipeline.agent.workflow import AssetWorkflow  # noqa: E402
 
 
@@ -56,6 +57,11 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--sam3-env", default=os.environ.get("SAM3_ENV", "sam3"), help="Conda env for SAM3")
     parser.add_argument("--sam3d-env", default=os.environ.get("SAM3D_ENV", "sam3d-objects"), help="Conda env for SAM3D")
+    parser.add_argument(
+        "--rewrite-prompt",
+        action="store_true",
+        help="Rewrite --prompt through the rule-based rewriter before sending to SAM3",
+    )
     parser.add_argument("--quiet", action="store_true", help="Only print final result lines, not per-stage progress")
     return parser.parse_args(argv)
 
@@ -110,6 +116,12 @@ def main(argv: list[str] | None = None) -> int:
     if not args.prompt.strip():
         print("--prompt must not be empty", file=sys.stderr)
         return 1
+
+    original_prompt = args.prompt
+    if args.rewrite_prompt:
+        args.prompt = rewrite_prompt(args.prompt, args.asset_category)
+        if args.prompt != original_prompt and not args.quiet:
+            print(f"[rewriter] {original_prompt!r} -> {args.prompt!r}", flush=True)
 
     os.environ["ISAAC_SIM_PATH"] = str(args.isaac_sim_path)
     workflow = AssetWorkflow(repo_root=ROOT, output_root=args.output_root)
