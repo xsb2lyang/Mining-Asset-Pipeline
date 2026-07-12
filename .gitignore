@@ -22,6 +22,7 @@
 /logs/
 /artifacts/
 /textures/
+/test001/
 *.usd
 *.usda
 *.usdc

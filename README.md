@@ -49,6 +49,7 @@ policy.
 - [USD conversion and physics pipeline record](docs/asset_usd_pipeline.md)
 - [Physics material parameter reference](docs/apply_physics_material.md)
 - [Asset Quality Agent workflow](docs/asset_quality_agent.md)
+- [Unattended CLI pipeline](docs/cli_pipeline.md)
 - [Red mug end-to-end validation](docs/e2e_red_mug_validation.md)
 - [Legacy local workspace setup](docs/legacy_workspace_setup.md)
 
