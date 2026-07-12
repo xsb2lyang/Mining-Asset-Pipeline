@@ -50,6 +50,6 @@ policy.
 
 ## License
 
-The project license is intentionally not selected yet. A license must be
-chosen before publishing the repository. Upstream SAM3, SAM3D Objects, Isaac
-Sim, and model weights remain subject to their own licenses and access terms.
+This project is licensed under the [Apache License 2.0](LICENSE). Upstream
+SAM3, SAM3D Objects, Isaac Sim, and model weights remain subject to their own
+licenses and access terms.
