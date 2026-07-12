@@ -6,6 +6,8 @@
 /Benchmark/Assest_maker/checkpoints/
 /Benchmark/Assest_maker/sam3/
 /Benchmark/Assest_maker/sam-3d-objects/
+/Benchmark/Assest_maker/sam3
+/Benchmark/Assest_maker/sam-3d-objects
 /Benchmark/isaac-sim-*.zip
 /external/
 /checkpoints/
@@ -51,6 +53,7 @@ htmlcov/
 venv/
 .env
 .env.*
+/environments/local.env
 .vscode/
 .idea/
 

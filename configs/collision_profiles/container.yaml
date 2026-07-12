@@ -1,0 +1,10 @@
+# Container-like assets: cups, buckets, hoppers, and open vessels.
+# convexHull is excluded because it seals concavities such as an opening.
+name: open_container
+preferred_approximation: sdf
+fallback_approximation: convexDecomposition
+production_strategy: compound_colliders
+notes:
+  - Verify the generated mesh contains an actual cavity before using SDF.
+  - Use hand-authored compound colliders when the opening must be guaranteed.
+  - Run drop and containment tests before publishing the asset.

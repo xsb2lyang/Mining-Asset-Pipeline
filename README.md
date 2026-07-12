@@ -35,14 +35,14 @@ policy.
 
 ## Quick start
 
-1. Read [the pipeline overview](docs/sam3_to_sam3d_pipeline.md).
-2. Read [the USD/physics record](docs/asset_usd_pipeline.md).
-3. Configure the two model environments and local Isaac Sim path as described
-   in `environments/` (to be added in the next migration stage).
+1. Follow [local setup](docs/setup.md).
+2. Read [the pipeline overview](docs/sam3_to_sam3d_pipeline.md).
+3. Read [the USD/physics record](docs/asset_usd_pipeline.md).
 
 ## Documentation
 
 - [Architecture and repository policy](docs/architecture.md)
+- [Local setup](docs/setup.md)
 - [SAM3 → SAM3D pipeline record](docs/sam3_to_sam3d_pipeline.md)
 - [USD conversion and physics pipeline record](docs/asset_usd_pipeline.md)
 - [Physics material parameter reference](docs/apply_physics_material.md)

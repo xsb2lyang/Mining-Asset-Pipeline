@@ -18,3 +18,6 @@ bash "$ISAAC_SIM_PATH/python.sh" scripts/inspect_physics.py \
   --input outputs/example.usd \
   --out outputs/example.inspect.json
 ```
+
+Use `scripts/launch_isaac_sim.sh` to start the Isaac Sim UI after configuring
+`environments/local.env`.
