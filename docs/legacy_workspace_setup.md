@@ -55,10 +55,10 @@ rm -rf checkpoints/hf-download
 
 ## 端到端测试记录
 
-`outputs/sam3d_test/` 目录里包含一次完整跑通的 **RGB → OBJ/GLB** 小 pipeline:
+`outputs/sam3d_test/` 目录里包含一次完整跑通的 **RGB → OBJ/GLB** 小 pipeline 输出:
 
-- 入口脚本: `outputs/sam3d_test/step1_sam3.py`(`sam3` 环境)
-- 出口脚本: `outputs/sam3d_test/step2_sam3d.py`(`sam3d-objects` 环境)
+- 当前入口脚本: `scripts/run_sam3.py`(`sam3` 环境)
+- 当前出口脚本: `scripts/run_sam3d.py`(`sam3d-objects` 环境)
 - 产物: `outputs/sam3d_test/red_mug/mug.{ply,glb,obj}`
 
 详细跑通记录、环境差异、bf16 / socks 代理 / MeshExtractResult 等坑的修法见:

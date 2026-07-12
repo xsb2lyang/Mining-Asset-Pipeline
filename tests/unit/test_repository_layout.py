@@ -21,11 +21,15 @@ class RepositoryLayoutTests(unittest.TestCase):
             "docs/setup.md",
             "environments/local.env.example",
             "scripts/launch_isaac_sim.sh",
+            "scripts/run_sam3.py",
+            "scripts/run_sam3d.py",
         ):
             self.assertTrue((ROOT / relative_path).is_file(), relative_path)
 
     def test_usd_tools_are_syntax_valid(self) -> None:
-        for source in sorted((ROOT / "src/mining_asset_pipeline/usd").glob("*.py")):
+        sources = list((ROOT / "src/mining_asset_pipeline/usd").glob("*.py"))
+        sources.extend((ROOT / "scripts").glob("*.py"))
+        for source in sorted(sources):
             py_compile.compile(str(source), doraise=True)
 
     def test_no_runtime_or_weights_are_tracked(self) -> None:

@@ -5,6 +5,9 @@
 > 跑通时间:2026-07-12
 > 适用项目:`Benchmark/Assest_maker`(矿业资产自动化生产链路的早期原型)
 
+> **仓库迁移说明:** 此记录保留当时的输出路径和产物名；可执行入口已迁至
+> `scripts/run_sam3.py` 与 `scripts/run_sam3d.py`，不再放在 `outputs/` 中。
+
 ---
 
 ## 1. 目标与背景
@@ -97,14 +100,12 @@
 ## 4. 落地目录与产物
 
 ```
-Benchmark/Assest_maker/outputs/sam3d_test/
+Benchmark/Assest_maker/outputs/sam3d_test/  # 历史测试输出（Git 忽略）
 ├── images/
 │   └── red_mug.jpg                      # 输入 RGB
-├── step1_sam3.py                        # SAM3 推理脚本(sam3 env)
 ├── step1_sam3.npz                       # mask / boxes / scores / prompt
 ├── step1_preview.png                    # RGB + 绿色 mask 叠加
 ├── step1_meta.json                      # 含 score=0.978
-├── step2_sam3d.py                       # SAM3D 推理脚本(sam3d-objects env)
 └── red_mug/
     ├── mug.ply        44.8 MB           # 3D Gaussian Splat
     ├── mug.glb        22.7 MB           # 真 mesh(GLB)
@@ -141,14 +142,14 @@ mug.glb : vertices=566790  faces=1134560
 [Unsplash 直链]
    curl ---> images/red_mug.jpg
 
-[sam3 环境] python step1_sam3.py
+[sam3 环境] python scripts/run_sam3.py
    ├── build_sam3_image_model(checkpoint_path=.../sam3.pt, load_from_HF=False)
    ├── model.to(torch.float32)            # 留 fp32,绕过 dtype mismatch
    ├── monkey-patch sam3.perflib.fused.addmm_act    # 替换 fused kernel
    └── processor.set_image + set_text_prompt('a red mug')
        → step1_sam3.npz
 
-[sam3d-objects 环境] python step2_sam3d.py
+[sam3d-objects 环境] python scripts/run_sam3d.py
    ├── 把 ALL_PROXY=socks://... 改写成 http://...      # 修 httpx 报错
    ├── Inference(checkpoints/hf/pipeline.yaml)
    ├── inference(rgb, mask, seed=42)
@@ -334,13 +335,21 @@ mesh = trimesh.Trimesh(vertices=v, faces=f, process=False)
 **Step 1 — SAM3(环境 `sam3`)**
 
 ```bash
-conda run -n sam3 python /home/user/Xsb_WS/Benchmark/Assest_maker/outputs/sam3d_test/step1_sam3.py
+source environments/local.env
+conda run -n sam3 python scripts/run_sam3.py \
+  --image "$PIPELINE_OUTPUT_DIR/sam3d_test/images/red_mug.jpg" \
+  --prompt "a red mug" \
+  --out-dir "$PIPELINE_OUTPUT_DIR/red_mug/sam3"
 ```
 
 **Step 2 — SAM3D(环境 `sam3d-objects`)**
 
 ```bash
-conda run -n sam3d-objects python /home/user/Xsb_WS/Benchmark/Assest_maker/outputs/sam3d_test/step2_sam3d.py
+source environments/local.env
+conda run -n sam3d-objects python scripts/run_sam3d.py \
+  --image "$PIPELINE_OUTPUT_DIR/sam3d_test/images/red_mug.jpg" \
+  --mask-npz "$PIPELINE_OUTPUT_DIR/red_mug/sam3/mask.npz" \
+  --out-dir "$PIPELINE_OUTPUT_DIR/red_mug/sam3d"
 ```
 
 > 注意:不要把两个 step 合在同一个 `conda run`(环境不同)。
