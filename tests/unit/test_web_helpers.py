@@ -18,7 +18,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from mining_asset_pipeline.agent.models import AssetRequest  # noqa: E402
 from mining_asset_pipeline.agent.storage import AssetStore  # noqa: E402
-from mining_asset_pipeline.agent.web import _render_progress_svg, _scan_assets, _tail_log  # noqa: E402
+from mining_asset_pipeline.agent.web import asset_ui_update, _render_progress_svg, _scan_assets, _tail_log  # noqa: E402
 from mining_asset_pipeline.agent.workflow import AssetWorkflow  # noqa: E402
 
 
@@ -134,6 +134,25 @@ class TailLogTests(unittest.TestCase):
 
             wf = _stub_workflow(temp_root)
             self.assertEqual(_tail_log(wf, asset_id), "")
+
+
+class AssetUiUpdateTests(unittest.TestCase):
+    def test_update_contract_matches_all_asset_ui_outputs(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            temp_root = Path(temp)
+            image = temp_root / "input.png"
+            from PIL import Image
+            Image.new("RGB", (4, 4), "red").save(image)
+            wf = _stub_workflow(temp_root)
+            asset_id = wf.create_asset(image, AssetRequest(prompt="mug"))
+
+            update = asset_ui_update(wf, asset_id)
+
+            # state, visible asset ID, ten _view values, complete log text
+            self.assertEqual(len(update), 13)
+            self.assertEqual(update[0], asset_id)
+            self.assertEqual(update[1], asset_id)
+            self.assertEqual(update[-1], "")
 
 
 if __name__ == "__main__":

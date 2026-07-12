@@ -1,5 +1,4 @@
 """Local Gradio review interface for the asset-quality workflow."""
-from __future__ import annotations
 
 import argparse
 import json
@@ -215,7 +214,6 @@ def _view(workflow: AssetWorkflow, asset_id: str) -> tuple[Any, ...]:
     tail = _tail_log(workflow, asset_id) if manifest["status"] == "failed" else ""
 
     return (
-        asset_id,
         progress_markdown(manifest),
         _render_progress_svg(manifest),
         manifest,
@@ -227,6 +225,11 @@ def _view(workflow: AssetWorkflow, asset_id: str) -> tuple[Any, ...]:
         events_md,
         tail,
     )
+
+
+def asset_ui_update(workflow: AssetWorkflow, asset_id: str) -> tuple[Any, ...]:
+    """Return the complete, stable output contract for asset-oriented UI events."""
+    return (asset_id, asset_id, *_view(workflow, asset_id), _log_for_asset(workflow, asset_id))
 
 
 def _log_for_asset(workflow: AssetWorkflow, asset_id: str, tail: int = 60) -> str:
@@ -307,7 +310,7 @@ def build_demo(workflow: AssetWorkflow):
         with gr.Accordion("运行日志与失败诊断", open=False):
             with gr.Row():
                 refresh_btn = gr.Button("刷新日志")
-                poll_toggle = gr.Button("暂停自动刷新")
+                auto_refresh = gr.Checkbox(value=True, label="自动刷新日志")
             log_stream = gr.Textbox(
                 label="日志（最近写入优先）",
                 lines=20,
@@ -321,7 +324,10 @@ def build_demo(workflow: AssetWorkflow):
             asset_list = gr.Dataframe(headers=["asset_id", "status", "created_at", "prompt"], interactive=False, label="outputs/ 下的资产")
             list_refresh = gr.Button("刷新列表")
 
-        outputs = [asset_state, asset_id, progress, progress_svg, manifest, original, mask, mesh_preview, model, reports, events, log_stream]
+        asset_outputs = [
+            asset_state, asset_id, progress, progress_svg, manifest, original,
+            mask, mesh_preview, model, reports, events, error_panel, log_stream,
+        ]
 
         def _safe_create(image_path, prompt_value, category_value, task_value, constraints_value):
             if not image_path or not prompt_value or not prompt_value.strip():
@@ -336,23 +342,21 @@ def build_demo(workflow: AssetWorkflow):
                 ))
             except (ValueError, RuntimeError, FileNotFoundError) as exc:
                 raise gr.Error(f"创建资产失败：{exc}")
-            yield (asset_id_value, *_view(workflow, asset_id_value), "")
+            yield asset_ui_update(workflow, asset_id_value)
             try:
                 workflow.run_visual(asset_id_value)
             except (RuntimeError, ValueError) as exc:
-                view = _view(workflow, asset_id_value)
-                yield (asset_id_value, *view, _log_for_asset(workflow, asset_id_value))
+                yield asset_ui_update(workflow, asset_id_value)
                 raise gr.Error(_format_runtime_error("视觉生成", asset_id_value, exc, workflow))
-            yield (asset_id_value, *_view(workflow, asset_id_value), _log_for_asset(workflow, asset_id_value))
+            yield asset_ui_update(workflow, asset_id_value)
 
         def _safe_load(value):
             if not value:
                 raise gr.Error("请输入资产 ID")
             try:
-                view = _view(workflow, value)
+                return asset_ui_update(workflow, value)
             except (ValueError, FileNotFoundError, json.JSONDecodeError) as exc:
                 raise gr.Error(f"加载资产失败：{exc}")
-            return (value, *view, _log_for_asset(workflow, value))
 
         def _safe_approve(value):
             if not value:
@@ -361,7 +365,7 @@ def build_demo(workflow: AssetWorkflow):
                 workflow.submit_review(value, ReviewDecision(approved=True))
             except (RuntimeError, ValueError) as exc:
                 raise gr.Error(_format_runtime_error("视觉审查", value, exc, workflow))
-            return (value, *_view(workflow, value), _log_for_asset(workflow, value))
+            return asset_ui_update(workflow, value)
 
         def _safe_reject(value, issue_value, feedback_value, prompt_value, candidate_value):
             if not value:
@@ -377,7 +381,7 @@ def build_demo(workflow: AssetWorkflow):
                 ))
             except (RuntimeError, ValueError) as exc:
                 raise gr.Error(_format_runtime_error("反馈修复", value, exc, workflow))
-            return (value, *_view(workflow, value), _log_for_asset(workflow, value))
+            return asset_ui_update(workflow, value)
 
         def _safe_confirm(value, material_value, collision_value):
             if not value:
@@ -386,17 +390,17 @@ def build_demo(workflow: AssetWorkflow):
                 workflow.confirm_physics(value, material_value, collision_value)
             except (RuntimeError, ValueError) as exc:
                 raise gr.Error(_format_runtime_error("USD 物理化", value, exc, workflow))
-            return (value, *_view(workflow, value), _log_for_asset(workflow, value))
+            return asset_ui_update(workflow, value)
 
-        def _refresh_log(value):
-            if not value:
-                return ""
+        def _refresh_log(value, enabled=True):
+            if not value or not enabled:
+                return gr.skip()
             return _log_for_asset(workflow, value)
 
         def _refresh_list():
             return _scan_assets(workflow)
 
-        def _on_select_asset(evt):
+        def _on_select_asset(evt: gr.SelectData):
             if not evt.index:
                 return ""
             row_index = evt.index[0]
@@ -405,20 +409,15 @@ def build_demo(workflow: AssetWorkflow):
                 return rows[row_index][0]
             return ""
 
-        def _toggle_timer():
-            log_timer.active = not log_timer.active
-            return "恢复自动刷新" if not log_timer.active else "暂停自动刷新"
-
-        create.click(_safe_create, [image, prompt, category, task, constraints], outputs, concurrency_limit=1, concurrency_id="asset_gpu")
-        load.click(_safe_load, [asset_id], outputs, queue=False)
-        approve.click(_safe_approve, [asset_state], outputs, concurrency_limit=1, concurrency_id="asset_gpu")
-        reject.click(_safe_reject, [asset_state, issue, feedback, revised_prompt, candidate_index], outputs, concurrency_limit=1, concurrency_id="asset_gpu")
-        confirm.click(_safe_confirm, [asset_state, material, collision], outputs, concurrency_limit=1, concurrency_id="asset_gpu")
+        create.click(_safe_create, [image, prompt, category, task, constraints], asset_outputs, concurrency_limit=1, concurrency_id="asset_gpu")
+        load.click(_safe_load, [asset_id], asset_outputs, queue=False)
+        approve.click(_safe_approve, [asset_state], asset_outputs, concurrency_limit=1, concurrency_id="asset_gpu")
+        reject.click(_safe_reject, [asset_state, issue, feedback, revised_prompt, candidate_index], asset_outputs, concurrency_limit=1, concurrency_id="asset_gpu")
+        confirm.click(_safe_confirm, [asset_state, material, collision], asset_outputs, concurrency_limit=1, concurrency_id="asset_gpu")
         refresh_btn.click(_refresh_log, [asset_state], [log_stream])
         list_refresh.click(_refresh_list, outputs=[asset_list])
         asset_list.select(_on_select_asset, outputs=[asset_id])
-        log_timer.tick(_refresh_log, [asset_state], [log_stream])
-        poll_toggle.click(_toggle_timer, outputs=[poll_toggle])
+        log_timer.tick(_refresh_log, [asset_state, auto_refresh], [log_stream])
         demo.load(_refresh_list, outputs=[asset_list])
     return demo.queue(default_concurrency_limit=1)
 
