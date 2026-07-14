@@ -108,6 +108,52 @@ async def convert(input_path: Path, output_path: Path, ctx_overrides: dict) -> N
     # Kept unreachable intentionally; failures are surfaced by the task status.
 
 
+def bind_vertex_color_material(stage) -> int:
+    """Bind a Preview Surface that reads imported ``displayColor`` primvars.
+
+    SAM3D GLBs store their appearance as ``COLOR_0`` vertex colors, not as a
+    PBR texture/material.  Asset Converter imports those values as
+    ``primvars:displayColor`` but does not necessarily create a render shader,
+    which leaves Isaac Sim's viewport grey.  The reader shader is deliberately
+    authored below the converted asset root so later physics scripts still pick
+    that root (rather than a top-level ``/Looks`` prim) as the rigid body.
+    """
+    from pxr import Sdf, Usd, UsdGeom, UsdShade
+
+    roots = [prim for prim in stage.GetPseudoRoot().GetChildren() if prim.IsDefined()]
+    if not roots:
+        return 0
+    root = roots[0]
+    colored_meshes = []
+    for prim in Usd.PrimRange(root):
+        if not prim.IsA(UsdGeom.Mesh):
+            continue
+        mesh = UsdGeom.Mesh(prim)
+        colors = mesh.GetDisplayColorPrimvar().Get()
+        if colors is not None and len(colors) > 0:
+            colored_meshes.append(prim)
+    if not colored_meshes:
+        return 0
+
+    material_path = root.GetPath().AppendChild("Looks").AppendChild("VertexColorMaterial")
+    material = UsdShade.Material.Define(stage, material_path)
+    shader = UsdShade.Shader.Define(stage, material_path.AppendChild("PreviewSurface"))
+    shader.CreateIdAttr("UsdPreviewSurface")
+    shader.CreateInput("roughness", Sdf.ValueTypeNames.Float).Set(0.6)
+
+    reader = UsdShade.Shader.Define(stage, material_path.AppendChild("DisplayColorReader"))
+    reader.CreateIdAttr("UsdPrimvarReader_float3")
+    reader.CreateInput("varname", Sdf.ValueTypeNames.Token).Set("displayColor")
+    reader.CreateOutput("result", Sdf.ValueTypeNames.Float3)
+    shader.CreateInput("diffuseColor", Sdf.ValueTypeNames.Color3f).ConnectToSource(
+        reader.ConnectableAPI(), "result"
+    )
+    material.CreateSurfaceOutput().ConnectToSource(shader.ConnectableAPI(), "surface")
+    for mesh_prim in colored_meshes:
+        UsdShade.MaterialBindingAPI.Apply(mesh_prim).Bind(material)
+    return len(colored_meshes)
+
+
 def main() -> int:
     args = parse_args()
 
@@ -147,21 +193,24 @@ def main() -> int:
             convert(args.input, args.output, ctx)
         )
 
+        from pxr import Gf, Usd, UsdGeom
+
+        stage = Usd.Stage.Open(str(args.output))
+        if stage is None:
+            raise RuntimeError(f"Unable to reopen USD for visual-material authoring: {args.output}")
         if args.scale is not None and args.scale != 1.0:
             # Apply the per-asset scale by wrapping the result under a
             # Xform that scales every child prim. Done here (after the
             # converter returns) so that the geometry stays consistent
             # with whatever unit the source mesh used.
-            from pxr import Usd, UsdGeom, Gf
-            stage = Usd.Stage.Open(str(args.output))
-            if stage is None:
-                raise RuntimeError(f"Unable to reopen USD for scale: {args.output}")
             root = stage.GetPseudoRoot()
             wrapped_path = root.GetPath().AppendChild("AssetScaleWrapper")
             wrapper = UsdGeom.Xform.Define(stage, wrapped_path)
             wrapper.AddScaleOp().Set(Gf.Vec3d(args.scale, args.scale, args.scale))
-            stage.GetRootLayer().Save()
             print(f"[scale] applied scale={args.scale} via /AssetScaleWrapper")
+
+        vertex_color_mesh_count = bind_vertex_color_material(stage)
+        stage.GetRootLayer().Save()
 
         print(json.dumps({
             "status": "ok",
@@ -169,6 +218,7 @@ def main() -> int:
             "output": str(args.output),
             "context": ctx,
             "scale_applied": args.scale,
+            "vertex_color_material_mesh_count": vertex_color_mesh_count,
         }, indent=2))
         return 0
     finally:
