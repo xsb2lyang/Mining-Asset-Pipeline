@@ -12,7 +12,7 @@ a future mining-robot benchmark, not the complete benchmark.
 
 - SAM3 mask generation with candidate checks and concrete prompt rewriting.
 - SAM 3D Objects GLB generation with bounded seed retries and preview fallback.
-- Human-gated Gradio workflow and unattended single/batch CLI workflows.
+- Unattended single/batch CLI workflows.
 - Per-asset manifests, isolated output directories, logs, reviews, and history.
 - Rule-based Physics Author/Critic with maximum three revision rounds.
 - Optional Claude API critic with deterministic fallback and audit marker.
@@ -27,14 +27,14 @@ a future mining-robot benchmark, not the complete benchmark.
 RGB + prompt
 → SAM3 → automatic mask checks
 → SAM3D → automatic mesh checks
-→ visual approval (human UI or automatic CLI)
+→ automatic CLI visual approval
 → Physics Author/Critic
 → visual.usd → physics.usd → simulation_ready.usd
 → static inspection → final/asset.usd
 ```
 
-The two public paths share `AssetWorkflow`; do not create a second business
-implementation in a CLI or UI callback.
+The single and batch CLIs share `AssetWorkflow`; do not duplicate business
+logic in command-line wrappers.
 
 ## Verification
 

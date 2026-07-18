@@ -18,8 +18,9 @@ create bundle
   → static inspection → final/asset.usd
 ```
 
-The Gradio path uses the same `AssetWorkflow`, but pauses for human visual
-approval. The CLI intentionally does not perform that human gate.
+The CLI records automatic visual approval after the deterministic checks and
+continues directly into physics review. Review the generated preview and
+reports separately when a human sign-off is required.
 
 ## Prerequisites
 

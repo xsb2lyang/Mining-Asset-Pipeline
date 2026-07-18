@@ -1,10 +1,9 @@
 """Unattended CLI: drive the asset pipeline end-to-end with no human in the loop.
 
-Image + text prompt in, ``outputs/<asset_id>/final/asset.usd`` out. The CLI
-mirrors what the Gradio UI does after a human clicks "Approve visual asset":
-it calls ``workflow.submit_review(ReviewDecision(approved=True))``, which in
-turn triggers ``begin_physics_review`` followed by ``run_physics_pipeline``
-(Physics Author/Critic multi-round review + USD authoring).
+Image + text prompt in, ``outputs/<asset_id>/final/asset.usd`` out. After the
+deterministic visual checks, the CLI records automatic visual approval and
+starts ``run_physics_pipeline`` (Physics Author/Critic multi-round review +
+USD authoring).
 
 Exit codes:
   0 — pipeline reached ``complete`` and ``final/asset.usd`` exists on disk

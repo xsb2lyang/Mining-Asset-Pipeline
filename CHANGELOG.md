@@ -10,12 +10,17 @@ tagged release. Dates use ISO 8601.
 - Release-readiness documentation, licensed sample manifests, environment
   doctor, packaging checks, and community health automation.
 
+### Removed
+
+- The optional Gradio web interface; the supported execution paths are now the
+  single-asset and batch CLIs.
+
 ## [0.1.0] - 2026-07-18
 
 ### Added
 
 - SAM3 → SAM 3D Objects → USD orchestration.
-- Human-gated Gradio workflow and unattended single/batch CLIs.
+- Unattended single/batch CLIs.
 - Persistent per-asset manifests, visual checks, and bounded physics review.
 - Rule-based Physics Author/Critic and optional Claude critic with fallback.
 - Rigid body, mass/density, collision, physics material, damping, and CCD

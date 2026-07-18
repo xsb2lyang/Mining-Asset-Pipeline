@@ -25,7 +25,6 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-ui = ["gradio>=5.0,<7"]
 llm = ["anthropic>=0.40"]
 dev = ["build>=1.2"]
 

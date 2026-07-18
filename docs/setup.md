@@ -6,7 +6,7 @@ model projects and Isaac Sim have incompatible CUDA/Python requirements.
 
 | Runtime | Purpose | Expected version/source |
 |---|---|---|
-| `.venv` | Orchestration, CLI, tests, optional UI/LLM | Python 3.11 |
+| `.venv` | Orchestration, CLI, tests, optional LLM | Python 3.11 |
 | Conda `sam3` | Text-conditioned segmentation | Python 3.12; pinned SAM3 submodule |
 | Conda `sam3d-objects` | Single-image 3D reconstruction | Pinned upstream environment |
 | Isaac Sim `python.sh` | USD conversion and physics schemas | Isaac Sim 5.1 |
@@ -52,7 +52,6 @@ python -m pip install -e .
 Install only the optional features you use:
 
 ```bash
-python -m pip install -e '.[ui]'
 python -m pip install -e '.[llm]'
 python -m pip install -e '.[dev]'
 ```
@@ -156,7 +155,6 @@ python scripts/doctor.py
 Useful variants:
 
 ```bash
-python scripts/doctor.py --require-ui
 python scripts/doctor.py --require-llm
 python scripts/doctor.py --json
 ```

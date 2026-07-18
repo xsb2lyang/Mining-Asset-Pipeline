@@ -16,13 +16,13 @@ and NVIDIA Isaac Sim 5.1.
 RGB + prompt
   → SAM3 text-conditioned segmentation
   → SAM 3D Objects reconstruction (GLB)
-  → deterministic visual checks + optional human approval
+  → deterministic visual checks + automatic CLI approval
   → Physics Author / Critic review (rules, optional Claude critic)
   → GLB → visual.usd → physics.usd → simulation_ready.usd
   → static physics inspection → final/asset.usd
 ```
 
-- Human-in-the-loop Gradio workflow and unattended CLI.
+- Unattended single-asset and batch command-line workflows.
 - Batch manifest runner with one isolated output bundle per input.
 - Deterministic physics fallback when the optional LLM is unavailable.
 - Container-aware collision selection (`sdf`/`convexDecomposition`).
@@ -85,9 +85,7 @@ python -m pip install -e .
 Optional features:
 
 ```bash
-python -m pip install -e '.[ui]'      # Gradio UI
 python -m pip install -e '.[llm]'     # Claude physics critic
-python -m pip install -e '.[ui,llm]'  # both
 ```
 
 The supported deployment is a source checkout because the complete application
@@ -174,13 +172,6 @@ python scripts/batch_pipeline.py \
   --continue-on-error
 ```
 
-### Human visual review
-
-```bash
-python -m pip install -e '.[ui]'
-python scripts/launch_asset_agent.py --output-root outputs
-```
-
 ### Optional Claude physics critic
 
 ```bash
@@ -231,8 +222,9 @@ GitHub-hosted CI.
 ## Known limitations
 
 - Single-image reconstruction cannot recover fully occluded geometry reliably.
-- The unattended CLI automatically accepts the visual stage; use the UI for a
-  human visual gate.
+- The CLI records automatic visual approval after deterministic checks. Inspect
+  `visual/sam3/preview.png`, `visual/sam3d/preview.png`, and the reports when
+  human sign-off is required.
 - Physics priors are currently limited and are not a substitute for measured
   material or inertial data.
 - Static USD checks do not prove stable contact, containment, graspability, or

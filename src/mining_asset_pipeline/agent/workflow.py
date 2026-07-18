@@ -70,7 +70,7 @@ class AssetWorkflow:
         self.store.write_json(root / "visual" / "sam3_report.json", sam3_report)
         self.store.set_artifact(asset_id, "sam3_report", root / "visual" / "sam3_report.json")
         if sam3_report["status"] != "pass":
-            self.store.transition(asset_id, AssetStatus.REVIEW_REQUIRED, "SAM3 output needs human review")
+            self.store.transition(asset_id, AssetStatus.REVIEW_REQUIRED, "SAM3 output requires review or revised input")
             return self.store.manifest(asset_id)
 
         sam3d_dir = root / "visual" / "sam3d"
@@ -96,7 +96,7 @@ class AssetWorkflow:
         self.store.write_json(root / "visual" / "geometry_report.json", glb_report)
         self.store.set_artifact(asset_id, "glb", sam3d_dir / "mug.glb")
         self.store.set_artifact(asset_id, "geometry_report", root / "visual" / "geometry_report.json")
-        self.store.transition(asset_id, AssetStatus.REVIEW_REQUIRED, "Visual assets are ready for human review")
+        self.store.transition(asset_id, AssetStatus.REVIEW_REQUIRED, "Visual assets are ready for approval")
         return self.store.manifest(asset_id)
 
     def submit_review(self, asset_id: str, decision: ReviewDecision) -> dict[str, Any]:
@@ -106,7 +106,7 @@ class AssetWorkflow:
         action = self.policy.repair_action(decision)
         payload = decision.to_dict() | {
             "action": "begin_physics_review" if decision.approved else action.action,
-            "explanation": "Human approved the visual asset." if decision.approved else action.explanation,
+            "explanation": "Visual asset approved." if decision.approved else action.explanation,
         }
         self.store.write_json(root / "visual" / "review.json", payload)
         self.store.set_artifact(asset_id, "review", root / "visual" / "review.json")
@@ -119,18 +119,14 @@ class AssetWorkflow:
         return self.run_physics_pipeline(asset_id)
 
     def begin_physics_review(self, asset_id: str, *, record_approval: bool = True) -> dict[str, Any]:
-        """Move a visually approved asset into the automatic physics-review stage.
-
-        The UI uses this boundary to render the live stage before the potentially
-        long USD subprocesses start.  It is not a human physics-confirmation API.
-        """
+        """Move a visually approved asset into the automatic physics-review stage."""
         if AssetStatus(self.store.manifest(asset_id)["status"]) != AssetStatus.REVIEW_REQUIRED:
             raise ValueError("Visual review is not currently required")
-        self.store.transition(asset_id, AssetStatus.VISUAL_APPROVED, "Human approved visual asset")
+        self.store.transition(asset_id, AssetStatus.VISUAL_APPROVED, "Visual asset approved")
         root = self.store.root(asset_id)
         if record_approval:
             decision = ReviewDecision(approved=True)
-            payload = decision.to_dict() | {"action": "begin_physics_review", "explanation": "Human approved the visual asset."}
+            payload = decision.to_dict() | {"action": "begin_physics_review", "explanation": "Visual asset approved."}
             self.store.write_json(root / "visual" / "review.json", payload)
             self.store.set_artifact(asset_id, "review", root / "visual" / "review.json")
         request = AssetRequest(**self.store.read_json(root / "request.json"))

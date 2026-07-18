@@ -1,10 +1,7 @@
-.PHONY: install install-ui install-llm doctor test check
+.PHONY: install install-llm doctor test check
 
 install:
 	python -m pip install -e .
-
-install-ui:
-	python -m pip install -e '.[ui]'
 
 install-llm:
 	python -m pip install -e '.[llm]'

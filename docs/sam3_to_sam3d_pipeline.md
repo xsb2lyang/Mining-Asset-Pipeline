@@ -61,7 +61,7 @@
 | PyTorch | 2.9.1 + CUDA 12.8 |
 | SAM3 conda env | `sam3`(已 `pip install -e .`) |
 | SAM3D Objects conda env | `sam3d-objects`(`sam3d_objects` 包**未** `pip install`,源代直跑) |
-| 关键依赖 | `trimesh`, `huggingface_hub`, `pytorch3d`, `warp`, `kaolin`, `gradio`(仅副作用) |
+| 关键依赖 | `trimesh`, `huggingface_hub`, `pytorch3d`, `warp`, `kaolin`, `gradio`（仅为上游导入副作用，不提供本项目 UI） |
 | 网络 | 设置了 `socks://127.0.0.1:7897/` 系统代理;外网可达 |
 
 ---
@@ -247,7 +247,7 @@ sys.path.append("notebook")
 
 照抄即可,不必 `pip install -e .`。
 
-### 6.4 gradio 链式触发 httpx → socks 代理解析失败
+### 6.4 SAM3D 上游的 gradio 导入链触发 httpx → socks 代理解析失败
 
 **现象:**
 

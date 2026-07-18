@@ -84,7 +84,7 @@ def _maximum_gpu_memory_mib(nvidia_smi: str) -> int | None:
     return max(values) if completed.returncode == 0 and values else None
 
 
-def collect_checks(*, require_ui: bool = False, require_llm: bool = False) -> list[Check]:
+def collect_checks(*, require_llm: bool = False) -> list[Check]:
     local = _local_environment()
     checks = [
         Check(
@@ -98,11 +98,9 @@ def collect_checks(*, require_ui: bool = False, require_llm: bool = False) -> li
         available = importlib.util.find_spec(module) is not None
         detail = "installed" if available else "run: pip install -e ."
         checks.append(Check(f"python:{package}", available, True, detail))
-    for module, requested in (("gradio", require_ui), ("anthropic", require_llm)):
-        available = importlib.util.find_spec(module) is not None
-        extra = "ui" if module == "gradio" else "llm"
-        detail = "installed" if available else f"run: pip install -e '.[{extra}]'"
-        checks.append(Check(f"optional:{module}", available, requested, detail))
+    anthropic_available = importlib.util.find_spec("anthropic") is not None
+    anthropic_detail = "installed" if anthropic_available else "run: pip install -e '.[llm]'"
+    checks.append(Check("optional:anthropic", anthropic_available, require_llm, anthropic_detail))
 
     sam3 = ROOT / "third_party" / "sam3" / "sam3" / "model_builder.py"
     sam3d = ROOT / "third_party" / "sam-3d-objects" / "pyproject.toml"
@@ -178,14 +176,13 @@ def collect_checks(*, require_ui: bool = False, require_llm: bool = False) -> li
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Check prerequisites for the Mining Asset Pipeline")
     parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
-    parser.add_argument("--require-ui", action="store_true", help="Treat Gradio as required")
     parser.add_argument("--require-llm", action="store_true", help="Treat the optional Anthropic SDK as required")
     return parser.parse_args(argv)
 
 
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
-    checks = collect_checks(require_ui=args.require_ui, require_llm=args.require_llm)
+    checks = collect_checks(require_llm=args.require_llm)
     passed = all(check.ok for check in checks if check.required)
     if args.json:
         print(json.dumps({"ready": passed, "checks": [asdict(check) for check in checks]}, indent=2))

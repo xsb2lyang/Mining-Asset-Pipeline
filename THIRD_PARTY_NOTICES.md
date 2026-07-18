@@ -10,7 +10,6 @@ gated model files.
 | SAM 3D Objects | <https://github.com/facebookresearch/sam-3d-objects> | `third_party/sam-3d-objects/` | See `third_party/sam-3d-objects/LICENSE` and its model terms |
 | NVIDIA Isaac Sim | <https://developer.nvidia.com/isaac/sim> | User-provided installation | NVIDIA software license terms |
 | Anthropic Python SDK/API | <https://github.com/anthropics/anthropic-sdk-python> | Optional environment dependency | SDK license and API terms |
-| Gradio | <https://github.com/gradio-app/gradio> | Optional environment dependency | Apache-2.0 |
 
 Model weights are not redistributed by this repository. Users must obtain them
 from the official providers and comply with access restrictions. A dependency

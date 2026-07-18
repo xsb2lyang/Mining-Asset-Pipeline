@@ -39,7 +39,6 @@ class RepositoryLayoutTests(unittest.TestCase):
             "scripts/doctor.py",
             "scripts/run_sam3.py",
             "scripts/run_sam3d.py",
-            "scripts/launch_asset_agent.py",
             "src/mining_asset_pipeline/agent/workflow.py",
         ):
             self.assertTrue((ROOT / relative_path).is_file(), relative_path)
@@ -70,7 +69,7 @@ class RepositoryLayoutTests(unittest.TestCase):
         metadata = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]
         dependencies = " ".join(metadata["dependencies"])
         self.assertIn("Pillow", dependencies)
-        self.assertIn("ui", metadata["optional-dependencies"])
+        self.assertNotIn("ui", metadata["optional-dependencies"])
         self.assertIn("llm", metadata["optional-dependencies"])
         package_init = ROOT / "src" / "mining_asset_pipeline" / "__init__.py"
         spec = importlib.util.spec_from_file_location("package_version", package_init)
@@ -79,6 +78,10 @@ class RepositoryLayoutTests(unittest.TestCase):
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
         self.assertEqual(module.__version__, metadata["version"])
+
+    def test_removed_web_ui_is_not_part_of_the_public_repository(self) -> None:
+        self.assertFalse((ROOT / "scripts" / "launch_asset_agent.py").exists())
+        self.assertFalse((ROOT / "src" / "mining_asset_pipeline" / "agent" / "web.py").exists())
 
     def test_public_docs_do_not_contain_maintainer_absolute_path(self) -> None:
         public_files = [ROOT / "README.md", *(ROOT / "docs").glob("*.md")]
