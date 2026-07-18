@@ -13,8 +13,11 @@ Prompt + RGB
   → single-image reconstruction
   → USD conversion
   → physical authoring
-  → simulation validation
-  → simulation-ready asset
+  → static validation
+  → baseline physics-authored asset
+
+Future Loop 2 extends this boundary with dynamic simulation validation before
+an asset can be called task-certified or simulation-ready for a benchmark.
 ```
 
 ## Target source layout
@@ -25,6 +28,7 @@ Prompt + RGB
 | `scripts/` | Thin CLI entry points that call `src/` |
 | `configs/materials/` | Material priors: density, friction, restitution |
 | `configs/collision_profiles/` | Collision selection profiles by object class |
+| `assets/samples/` | Small licensed inputs and reproducibility manifests |
 | `tests/` | Fast unit tests, integration checks, and Isaac-based regression tests |
 | `environments/` | Conda/environment variable setup instructions |
 | `third_party/` | Pinned upstream submodules; no copied source code |
@@ -41,9 +45,10 @@ Prompt + RGB
 - **Sample inputs:** only small, redistributable inputs plus provenance and
   license information may live under `assets/samples/`.
 
-## Legacy workspace migration
+## Local runtime boundary
 
-The USD tools now live in `src/mining_asset_pipeline/usd/`; their supported
-CLI entry points live in `scripts/`. The misspelled legacy path
-`Benchmark/Assest_maker/asset_pipeline/isaac/` contains compatibility wrappers
-so the proven local workflow and historical experiment notes continue to work.
+The USD implementations live in `src/mining_asset_pipeline/usd/`; supported CLI
+entry points live in `scripts/`. Historical workstation directories under
+`Benchmark/` are ignored and are not part of the public repository contract.
+A fresh clone may place Isaac Sim and checkpoints anywhere and configure their
+locations through `environments/local.env`.

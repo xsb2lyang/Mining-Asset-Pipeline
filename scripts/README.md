@@ -14,6 +14,7 @@ with Isaac Sim's `python.sh`, not the current conda Python.
 | `run_sam3d.py` | Reconstruct GLB/OBJ/PLY from an RGB image and mask (SAM3D env) |
 | `run_pipeline.py` | Unattended CLI: image + prompt → `final/asset.usd` (no human in the loop) |
 | `batch_pipeline.py` | Batch wrapper: JSON manifest → one independent USD asset per entry + summary JSON |
+| `doctor.py` | Check local packages, Conda environments, checkpoints, GPU tools, and Isaac Sim |
 | `launch_asset_agent.py` | Launch the local human-in-the-loop Gradio asset-quality workflow |
 
 Example:
@@ -45,12 +46,18 @@ unattended CLI:
 
 ```bash
 python scripts/run_pipeline.py \
-  --image path/to/red_mug.jpg \
-  --prompt "a red mug" \
-  --asset-category cup
+  --image assets/samples/paper_tube_rgb.png \
+  --prompt "a cardboard tube" \
+  --asset-category open_container
 ```
 
 Exit codes: `0` complete (writes `final/asset.usd`) / `2` blocked
 (Author/Critic did not converge in 3 rounds) / `1` any other failure.
 `ISAAC_SIM_PATH` (env var or `--isaac-sim-path`) is required because the
 USD authoring stage invokes Isaac Sim's `python.sh`.
+
+Before a real run, check the complete local installation:
+
+```bash
+python scripts/doctor.py
+```

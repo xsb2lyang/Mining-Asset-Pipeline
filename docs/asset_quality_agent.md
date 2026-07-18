@@ -49,4 +49,7 @@ final/            # 通过静态检查的 asset.usd 与 asset_report.json
 
 `configs/physics_spec_template.yaml` 定义了每资产物理规格的公开字段；当前工作流把材质、质量/密度、碰撞近似、摩擦、弹性、阻尼、CCD 和重力开关映射到现有 USD 脚本。`apply_physics_material.py` 的其余高级参数仍可由后续 policy 扩展填入。
 
-第一期默认使用规则策略，LLM 仅保留为将来的可插拔解释/建议接口。它不会自动补洞、编辑纹理或伪造几何修复；这类反馈会请求新的图像、prompt 或人工处理。
+第一期默认使用可复现的规则策略。CLI 可通过 `--use-llm-critic` 注入可选
+Claude 物理 Critic；缺少 SDK、密钥或 API/解析失败时会带审计标记降级为规则
+Critic。它不会自动补洞、编辑纹理或伪造几何修复；这类反馈会请求新的图像、
+prompt 或人工处理。

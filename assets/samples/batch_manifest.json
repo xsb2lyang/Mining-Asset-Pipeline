@@ -1,0 +1,12 @@
+[
+  {
+    "image": "assets/samples/black_slender_device_rgb.png",
+    "prompt": "a single rusty iron rod standing upright with a decorative knob near the top and an orange-red insulated wire attached at the tip",
+    "asset_category": "rod"
+  },
+  {
+    "image": "assets/samples/paper_tube_rgb.png",
+    "prompt": "a cardboard tube",
+    "asset_category": "open_container"
+  }
+]

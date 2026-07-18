@@ -1,5 +1,10 @@
 # 资产 USD 化 / 物理化 试跑记录
 
+> **历史实验记录:** 本文保留 2026-07-12 的参数推理过程，不是当前 CLI
+> 使用手册。原始红杯输出已清理；当前命令见 `docs/cli_pipeline.md`。
+> 对开口容器，当前策略必须使用 `sdf` 或 `convexDecomposition`，不能使用
+> 会封住开口的 `convexHull`。
+
 > 配合 `docs/sam3_to_sam3d_pipeline.md`:本笔记衔接 SAM3D 输出(`mug.{glb,obj}`)→ USD → 物理化 → 静态校验。
 > 跑通时间:2026-07-12
 
@@ -8,9 +13,8 @@
 ## 1. 测试目标
 
 把 SAM3D 生成的"马克杯"几何(`outputs/sam3d_test/red_mug/mug.obj`)
-转成带 PhysX 物理属性的 USD,使其在 Isaac Sim 5.1.0 中
-可直接落桌 / 抓取 / 推撞 —— **矿业场景对资产物理质量(密度、碰撞近似、惯量)
-要求很高**,所以每个参数都要按物体实际语义钉死。
+转成带 PhysX 基础物理属性的 USD，并验证 schema 是否完整。动态落桌、抓取、
+推撞仍需 Loop 2 仿真测试；静态检查通过不能证明这些任务可执行。
 
 ---
 
@@ -78,13 +82,13 @@ python.sh convert_glb_to_usd.py \
 python.sh prepare_physics.py \
     --input  outputs/sam3d_test/red_mug/mug.usd \
     --output outputs/sam3d_test/red_mug/mug_physics.usd \
-    --collision convexHull \
+    --collision sdf \
     --density 2500
 ```
 
 | 参数 | 取值 | 语义理由 |
 |---|---|---|
-| `--collision convexHull` | **convexHull** | mug 整体接近凸,把手小凹 + 杯口凹。一个凸包就够了。`convexDecomposition` 会拆 8+ 个凸块,**落桌会反复弹跳、姿态不稳**;`convexHull` 物理稳定、接触少、落桌更"自然" |
+| `--collision sdf` | **sdf** | 当前规则：开口容器不能使用会封口的 `convexHull`。历史试跑曾优先稳定性选择凸包，该决定已被后续容器开口审查推翻；SDF 不可用时退回 `convexDecomposition`。 |
 | `--density 2500` | **2500 kg/m³** | 陶瓷马克杯真实密度;PhysX 自动算 mass + inertia;不写死 mass 让语义保真 |
 
 ### 4.3 不写的东西(脚本不支持 / 不适用)
@@ -193,25 +197,25 @@ bash /path/to/isaac-sim-5.1.0/python.sh ...
 ```bash
 # 1) OBJ → USD(几何)
 unset CONDA_PREFIX CONDA_DEFAULT_ENV CONDA_SHLVL
-bash /home/user/Xsb_WS/Benchmark/simulator/isaac-sim-5.1.0/python.sh \
-  /home/user/Xsb_WS/Benchmark/Assest_maker/asset_pipeline/isaac/convert_glb_to_usd.py \
-  --input  /home/user/Xsb_WS/Benchmark/Assest_maker/outputs/sam3d_test/red_mug/mug.obj \
-  --output /home/user/Xsb_WS/Benchmark/Assest_maker/outputs/sam3d_test/red_mug/mug.usd \
+bash ${REPO_ROOT}/Benchmark/simulator/isaac-sim-5.1.0/python.sh \
+  ${REPO_ROOT}/scripts/convert_to_usd.py \
+  --input  ${REPO_ROOT}/Benchmark/Assest_maker/outputs/sam3d_test/red_mug/mug.obj \
+  --output ${REPO_ROOT}/Benchmark/Assest_maker/outputs/sam3d_test/red_mug/mug.usd \
   --single-mesh
 
 # 2) 加物理(陶瓷密度 2500,凸包碰撞)
-bash /home/user/Xsb_WS/Benchmark/simulator/isaac-sim-5.1.0/python.sh \
-  /home/user/Xsb_WS/Benchmark/Assest_maker/asset_pipeline/isaac/prepare_physics.py \
-  --input     /home/user/Xsb_WS/Benchmark/Assest_maker/outputs/sam3d_test/red_mug/mug.usd \
-  --output    /home/user/Xsb_WS/Benchmark/Assest_maker/outputs/sam3d_test/red_mug/mug_physics.usd \
+bash ${REPO_ROOT}/Benchmark/simulator/isaac-sim-5.1.0/python.sh \
+  ${REPO_ROOT}/scripts/prepare_physics.py \
+  --input     ${REPO_ROOT}/Benchmark/Assest_maker/outputs/sam3d_test/red_mug/mug.usd \
+  --output    ${REPO_ROOT}/Benchmark/Assest_maker/outputs/sam3d_test/red_mug/mug_physics.usd \
   --collision convexHull \
   --density   2500
 
 # 3) 静态 schema 校验(写到 inspect.json)
-bash /home/user/Xsb_WS/Benchmark/simulator/isaac-sim-5.1.0/python.sh \
-  /home/user/Xsb_WS/Benchmark/Assest_maker/asset_pipeline/isaac/inspect_physics.py \
-  --input /home/user/Xsb_WS/Benchmark/Assest_maker/outputs/sam3d_test/red_mug/mug_physics.usd \
-  --out   /home/user/Xsb_WS/Benchmark/Assest_maker/outputs/sam3d_test/red_mug/inspect.json
+bash ${REPO_ROOT}/Benchmark/simulator/isaac-sim-5.1.0/python.sh \
+  ${REPO_ROOT}/scripts/inspect_physics.py \
+  --input ${REPO_ROOT}/Benchmark/Assest_maker/outputs/sam3d_test/red_mug/mug_physics.usd \
+  --out   ${REPO_ROOT}/Benchmark/Assest_maker/outputs/sam3d_test/red_mug/inspect.json
 ```
 
 ---
@@ -344,11 +348,11 @@ USD 可在 Isaac Sim 的 Property 面板继续编辑。
 
 ```bash
 unset CONDA_PREFIX CONDA_DEFAULT_ENV CONDA_SHLVL
-bash /home/user/Xsb_WS/Benchmark/simulator/isaac-sim-5.1.0/python.sh \
-  /home/user/Xsb_WS/Benchmark/Assest_maker/asset_pipeline/isaac/apply_physics_material.py \
-  --input  /home/user/Xsb_WS/Benchmark/Assest_maker/outputs/sam3d_test/red_mug/mug_v2_physics.usd \
-  --output /home/user/Xsb_WS/Benchmark/Assest_maker/outputs/sam3d_test/red_mug/mug_v2_material.usd \
-  --report /home/user/Xsb_WS/Benchmark/Assest_maker/outputs/sam3d_test/red_mug/material_report.json \
+bash ${REPO_ROOT}/Benchmark/simulator/isaac-sim-5.1.0/python.sh \
+  ${REPO_ROOT}/scripts/apply_physics_material.py \
+  --input  ${REPO_ROOT}/Benchmark/Assest_maker/outputs/sam3d_test/red_mug/mug_v2_physics.usd \
+  --output ${REPO_ROOT}/Benchmark/Assest_maker/outputs/sam3d_test/red_mug/mug_v2_material.usd \
+  --report ${REPO_ROOT}/Benchmark/Assest_maker/outputs/sam3d_test/red_mug/material_report.json \
   --static-friction 0.5 --dynamic-friction 0.4 --restitution 0.05 \
   --friction-combine-mode average --restitution-combine-mode max \
   --linear-damping 0.02 --angular-damping 0.05 --enable-ccd \

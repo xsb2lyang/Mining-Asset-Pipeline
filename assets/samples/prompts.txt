@@ -1,0 +1,5 @@
+black_slender_device_rgb.png
+Prompt: a single rusty iron rod standing upright with a decorative knob near the top and an orange-red insulated wire attached at the tip
+
+paper_tube_rgb.png
+Prompt: a cardboard tube

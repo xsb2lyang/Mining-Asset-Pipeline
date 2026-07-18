@@ -1,6 +1,6 @@
 # USD 物理材质与刚体参数说明
 
-`Benchmark/Assest_maker/asset_pipeline/isaac/apply_physics_material.py`
+`scripts/apply_physics_material.py`
 用于在已有 USD 资产上继续补充或调整 Isaac Sim 的物理属性。
 
 它面向由 SAM3D 网格转换而来的**单刚体资产**，例如矿石、工具、容器、独立零件。
@@ -20,8 +20,8 @@ OBJ / GLB
 
 ```bash
 unset CONDA_PREFIX CONDA_DEFAULT_ENV CONDA_SHLVL
-bash /home/user/Xsb_WS/Benchmark/simulator/isaac-sim-5.1.0/python.sh \
-  /home/user/Xsb_WS/Benchmark/Assest_maker/asset_pipeline/isaac/apply_physics_material.py \
+bash ${REPO_ROOT}/Benchmark/simulator/isaac-sim-5.1.0/python.sh \
+  ${REPO_ROOT}/scripts/apply_physics_material.py \
   --input  INPUT.usd \
   --output OUTPUT.usd \
   --report OUTPUT.report.json \
@@ -31,8 +31,8 @@ bash /home/user/Xsb_WS/Benchmark/simulator/isaac-sim-5.1.0/python.sh \
 可执行以下命令查看全部 CLI 参数：
 
 ```bash
-bash /home/user/Xsb_WS/Benchmark/simulator/isaac-sim-5.1.0/python.sh \
-  /home/user/Xsb_WS/Benchmark/Assest_maker/asset_pipeline/isaac/apply_physics_material.py \
+bash ${REPO_ROOT}/Benchmark/simulator/isaac-sim-5.1.0/python.sh \
+  ${REPO_ROOT}/scripts/apply_physics_material.py \
   --help
 ```
 
@@ -111,11 +111,11 @@ SAM3D 网格自动创建这些 API。
 
 ```bash
 unset CONDA_PREFIX CONDA_DEFAULT_ENV CONDA_SHLVL
-bash /home/user/Xsb_WS/Benchmark/simulator/isaac-sim-5.1.0/python.sh \
-  /home/user/Xsb_WS/Benchmark/Assest_maker/asset_pipeline/isaac/apply_physics_material.py \
-  --input  /home/user/Xsb_WS/Benchmark/Assest_maker/outputs/sam3d_test/red_mug/mug_v2_physics.usd \
-  --output /home/user/Xsb_WS/Benchmark/Assest_maker/outputs/sam3d_test/red_mug/mug_v2_material.usd \
-  --report /home/user/Xsb_WS/Benchmark/Assest_maker/outputs/sam3d_test/red_mug/material_report.json \
+bash ${REPO_ROOT}/Benchmark/simulator/isaac-sim-5.1.0/python.sh \
+  ${REPO_ROOT}/scripts/apply_physics_material.py \
+  --input  ${REPO_ROOT}/outputs/example/physics/physics.usd \
+  --output ${REPO_ROOT}/outputs/example/physics/simulation_ready.usd \
+  --report ${REPO_ROOT}/outputs/example/physics/material_report.json \
   --static-friction 0.5 \
   --dynamic-friction 0.4 \
   --restitution 0.05 \

@@ -1,5 +1,10 @@
 # Red mug end-to-end validation
 
+> **Historical record (2026-07-12):** the input and generated red-mug outputs
+> are intentionally not distributed with the repository. Use the licensed
+> examples in `assets/samples/` for current reproduction. Paths below document
+> the original experiment and are not expected to exist in a fresh clone.
+
 This record verifies that the reorganized repository can produce a
 simulation-ready USD from the local red-mug sample without relying on the
 legacy pipeline entry points.
