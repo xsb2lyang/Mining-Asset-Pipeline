@@ -19,7 +19,7 @@ RGB + prompt
   → semantic visual Agent review with bounded repairs
   → isolated Physics Author / Critic review plus deterministic veto
   → GLB → visual.usd → physics.usd → simulation_ready.usd
-  → static physics inspection → final/asset.usd
+  → static physics inspection → final/<object_name>.usd
 ```
 
 - Unattended single-asset and batch command-line workflows.
@@ -211,7 +211,7 @@ outputs/<asset-id>/
 ├── visual/        # immutable SAM3/SAM3D attempts and selected review
 ├── physics/       # Author/Critic records, USD stages, static inspection
 └── final/
-    ├── asset.usd
+    ├── <object_name>.usd
     └── asset_report.json
 ```
 

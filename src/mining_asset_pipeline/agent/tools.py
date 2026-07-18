@@ -14,7 +14,7 @@ from .inspection import create_sam3_contact_sheet, inspect_glb, inspect_sam3, se
 from .models import AssetBrief, AssetPhase, AssetQuality, AssetRequest, AssetStatus
 from .physics_agents import PhysicsCriticAgent
 from .runner import SubprocessToolRunner, ToolRunner, isaac_clean_environment
-from .storage import AssetStore
+from .storage import AssetStore, asset_filename_stem
 
 
 ALLOWED_VISUAL_ACTIONS = {"accept", "select_mask", "rewrite_prompt", "rerun_sam3d", "block"}
@@ -441,9 +441,8 @@ class AgentTools:
         root = self.store.root(asset_id)
         manifest = self.store.manifest(asset_id)
         if manifest.get("status") == AssetStatus.COMPLETE.value:
-            self._require_artifact(asset_id, "final_usd")
-            self._require_artifact(asset_id, "final_report")
-            return self._tool_result(asset_id, "finalize", True, {"reused": True, "final_usd": manifest["artifacts"].get("final_usd")})
+            final_usd = self._ensure_named_final_asset(asset_id)
+            return self._tool_result(asset_id, "finalize", True, {"reused": True, "final_usd": self.store.relative(asset_id, final_usd)})
         self._require_phase(asset_id, {AssetPhase.STATIC_VALIDATION, AssetPhase.FINALIZATION})
         visual_review = self.store.read_json(self._require_artifact(asset_id, "visual_review"))
         physics_review = self.store.read_json(self._require_artifact(asset_id, "physics_review"))
@@ -476,7 +475,9 @@ class AgentTools:
                 raise ValueError("degraded collision approximation must come from its repository profile")
         ready = self._require_artifact(asset_id, "simulation_ready_usd")
         self.store.set_phase(asset_id, AssetPhase.FINALIZATION, "Writing final static asset package")
-        final_usd = root / "final" / "asset.usd"
+        brief = self.store.read_json(self._require_artifact(asset_id, "asset_brief"))
+        final_stem = asset_filename_stem(str(brief["object_name"]), str(brief.get("category", "generated_asset")))
+        final_usd = root / "final" / f"{final_stem}.usd"
         shutil.copy2(ready, final_usd)
         self.store.set_artifact(asset_id, "final_usd", final_usd)
         manifest = self.store.manifest(asset_id)
@@ -495,8 +496,9 @@ class AgentTools:
             "quality": selected_quality.value,
             "controller": manifest["controller"],
             "original_prompt": self.store.read_json(root / "request.json")["prompt"],
-            "asset_brief": self.store.read_json(self._require_artifact(asset_id, "asset_brief")),
-            "normalized_prompt": self.store.read_json(self._require_artifact(asset_id, "asset_brief"))["sam3_prompts"][0],
+            "asset_brief": brief,
+            "normalized_prompt": brief["sam3_prompts"][0],
+            "final_filename": final_usd.name,
             "selection": self._selected(asset_id),
             "repair_trace": repair_trace,
             "visual_review": visual_review,
@@ -514,6 +516,25 @@ class AgentTools:
         self.store.set_artifact(asset_id, "final_report", report_path)
         self.store.transition(asset_id, AssetStatus.COMPLETE, "Final static asset package written", phase=AssetPhase.FINALIZATION, quality=selected_quality)
         return self._tool_result(asset_id, "finalize", True, {"final_usd": str(final_usd), "quality": selected_quality.value})
+
+    def _ensure_named_final_asset(self, asset_id: str) -> Path:
+        """Idempotently migrate legacy ``final/asset.usd`` bundles."""
+        current = self._require_artifact(asset_id, "final_usd")
+        report_path = self._require_artifact(asset_id, "final_report")
+        brief = self.store.read_json(self._require_artifact(asset_id, "asset_brief"))
+        stem = asset_filename_stem(str(brief["object_name"]), str(brief.get("category", "generated_asset")))
+        expected = self.store.root(asset_id) / "final" / f"{stem}.usd"
+        if current != expected:
+            if expected.exists():
+                raise FileExistsError(f"semantic final asset path already exists: {expected}")
+            current.replace(expected)
+            self.store.set_artifact(asset_id, "final_usd", expected)
+            report = self.store.read_json(report_path)
+            report["final_filename"] = expected.name
+            report["artifacts"] = self.store.manifest(asset_id)["artifacts"]
+            self.store.write_json(report_path, report)
+            self.store.set_artifact(asset_id, "final_report", report_path)
+        return expected
 
     def _select_sam3_attempt(self, asset_id: str, attempt_dir: Path, index: int) -> None:
         selected = self._selected(asset_id)

@@ -28,7 +28,7 @@ RGB + rough prompt
 → semantic brief → SAM3 review → SAM3D four-view review
 → Physics Author / Critic + deterministic veto
 → visual.usd → physics.usd → simulation_ready.usd
-→ static inspection → final/asset.usd
+→ static inspection → final/<object_name>.usd
 ```
 
 ## Verification

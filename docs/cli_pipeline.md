@@ -11,7 +11,7 @@ RGB + rough prompt
   → SAM3D seeds 42/43/44 + four-view contact sheet + Visual Critic
   → isolated Physics Author / Critic + deterministic veto
   → GLB → visual.usd → physics.usd → simulation_ready.usd
-  → authored-value static inspection → final/asset.usd
+  → authored-value static inspection → final/<object_name>.usd
 ```
 
 Manifest v3 uses independent dimensions:
@@ -76,7 +76,7 @@ On success stdout contains:
 
 ```text
 asset_id=<asset-id>
-final_usd=<absolute-path>/final/asset.usd
+final_usd=<absolute-path>/final/<object_name>.usd
 quality=agent_reviewed|degraded
 ```
 
@@ -129,10 +129,14 @@ outputs/<asset-id>/
 │   ├── physics.usd
 │   ├── simulation_ready.usd
 │   └── inspection.json
-└── final/{asset.usd,asset_report.json}
+└── final/{<object_name>.usd,asset_report.json}
 ```
 
-All manifest paths are bundle-relative. The final report records controller, model/calls, fallback, selected mask/seed, repair trace, Physics Author/Critic results, assumptions, static inspection, and the Loop 2 boundary.
+All manifest paths are bundle-relative. The USD filename is derived from
+`asset_brief.object_name` as a safe snake-case name, for example
+`paper tube` becomes `paper_tube.usd`. The final report records that filename,
+controller, model/calls, fallback, selected mask/seed, repair trace, Physics
+Author/Critic results, assumptions, static inspection, and the Loop 2 boundary.
 
 ## Validation boundary
 

@@ -10,7 +10,7 @@ RGB + 粗 Prompt
 → Physics Author / Critic 隔离审查
 → 确定性规则最终否决
 → USD 物理化与静态一致性检查
-→ final/asset.usd
+→ final/<object_name>.usd
 ```
 
 没有网页 UI 和人工视觉审批。Loop 2 的动态落体、容器性、抓取与机器人任务测试尚未实现。

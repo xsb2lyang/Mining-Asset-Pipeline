@@ -36,6 +36,11 @@ Omit `check-physics --payload` only when no semantic Critic can run. Such output
 - `author-usd`: combined physics review is accepted and `ISAAC_SIM_PATH/python.sh` exists.
 - `finalize`: visual, physics, and static inspection are accepted.
 
+`finalize` derives the USD filename from `asset_brief.object_name` and returns
+the authoritative relative path in `final_usd`. Do not assume `asset.usd` or
+rename the file outside the tool, because the manifest and hashes must remain
+synchronized.
+
 Successful SAM3/SAM3D calls with the same prompt/seed are idempotent and reuse the stored attempt. Read `status` after interruption. Do not mutate manifests manually. Assets whose manifest schema is not 3 are read-only and cannot resume.
 
 ## Payload locations

@@ -44,8 +44,9 @@ class UnattendedFlowTests(unittest.TestCase):
                 manifest = workflow.run_physics_pipeline(asset_id)
 
             self.assertEqual(manifest["status"], AssetStatus.COMPLETE.value)
-            final_usd = workflow.store.root(asset_id) / "final" / "asset.usd"
+            final_usd = workflow.store.artifact_path(asset_id, "final_usd")
             self.assertTrue(final_usd.is_file())
+            self.assertEqual(final_usd.name, "red_ceramic_mug.usd")
 
     def test_blocked_after_three_failed_review_rounds(self) -> None:
         """Force BLOCKED by pinning the author's initial spec and stubbing revise()
@@ -78,8 +79,7 @@ class UnattendedFlowTests(unittest.TestCase):
                 manifest = workflow.run_physics_pipeline(asset_id)
 
             self.assertEqual(manifest["status"], AssetStatus.BLOCKED.value)
-            final_usd = workflow.store.root(asset_id) / "final" / "asset.usd"
-            self.assertFalse(final_usd.exists())
+            self.assertEqual(list((workflow.store.root(asset_id) / "final").glob("*.usd")), [])
             review_paths = sorted((workflow.store.root(asset_id) / "physics").glob("physics_review_*.json"))
             self.assertGreaterEqual(len(review_paths), 1)
             any_rejected = any(

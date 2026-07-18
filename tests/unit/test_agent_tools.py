@@ -17,6 +17,7 @@ from mining_asset_pipeline.agent.models import AssetRequest, AssetStatus
 from mining_asset_pipeline.agent.physics_agents import PhysicsAuthorAgent
 from mining_asset_pipeline.agent.policy import RuleBasedPolicy
 from mining_asset_pipeline.agent.tools import AgentTools
+from mining_asset_pipeline.agent.storage import asset_filename_stem
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -32,6 +33,12 @@ class CountingRunner(FakeRunner):
 
 
 class AgentToolsTests(unittest.TestCase):
+    def test_semantic_asset_filename_is_portable(self) -> None:
+        self.assertEqual(asset_filename_stem("a Paper Tube"), "paper_tube")
+        self.assertEqual(asset_filename_stem("矿用纸筒"), "矿用纸筒")
+        self.assertEqual(asset_filename_stem("CON"), "asset_con")
+        self.assertLessEqual(len(asset_filename_stem("x" * 100)), 64)
+
     def _create(self, temp_root: Path, runner=None) -> tuple[AgentTools, str]:
         image = temp_root / "mug.png"
         Image.new("RGB", (20, 20), "red").save(image)
@@ -150,6 +157,18 @@ class AgentToolsTests(unittest.TestCase):
             self.assertTrue(tools.check_physics(asset_id, semantic)["reused"])
             self.assertTrue(tools.author_usd(asset_id)["reused"])
             self.assertTrue(tools.finalize(asset_id, quality="agent_reviewed")["reused"])
+            semantic = tools.store.artifact_path(asset_id, "final_usd")
+            self.assertEqual(semantic.name, "red_ceramic_mug.usd")
+            # A completed manifest-v3 bundle with the former fixed filename is
+            # migrated on an idempotent finalize retry.
+            legacy = semantic.with_name("asset.usd")
+            semantic.replace(legacy)
+            tools.store.set_artifact(asset_id, "final_usd", legacy)
+            migrated = tools.finalize(asset_id, quality="agent_reviewed")
+            self.assertTrue(migrated["reused"])
+            self.assertEqual(tools.store.artifact_path(asset_id, "final_usd").name, "red_ceramic_mug.usd")
+            report = tools.store.read_json(tools.store.artifact_path(asset_id, "final_report"))
+            self.assertEqual(report["final_filename"], "red_ceramic_mug.usd")
 
     def test_finalize_rejects_missing_reviews(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

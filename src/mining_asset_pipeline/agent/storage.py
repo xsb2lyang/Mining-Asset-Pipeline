@@ -8,6 +8,7 @@ import re
 import shutil
 import tempfile
 import uuid
+import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -22,6 +23,20 @@ def _now() -> str:
 def _slug(text: str) -> str:
     value = re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
     return (value or "asset")[:40]
+
+
+def asset_filename_stem(text: str, fallback: str = "generated_asset") -> str:
+    """Return a portable, human-readable filename stem from asset semantics."""
+    value = unicodedata.normalize("NFKC", text).strip().lower()
+    value = re.sub(r"^(?:a|an|the)\s+", "", value)
+    value = re.sub(r"[^\w]+", "_", value, flags=re.UNICODE).strip("_")
+    value = value[:64].rstrip("_")
+    if not value:
+        value = re.sub(r"[^\w]+", "_", unicodedata.normalize("NFKC", fallback).strip().lower(), flags=re.UNICODE).strip("_")
+    value = value[:64].rstrip("_") or "generated_asset"
+    if value in {"con", "prn", "aux", "nul", *(f"com{i}" for i in range(1, 10)), *(f"lpt{i}" for i in range(1, 10))}:
+        value = f"asset_{value}"
+    return value
 
 
 class AssetStore:

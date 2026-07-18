@@ -29,6 +29,9 @@ Read [tool-contract.md](references/tool-contract.md) before invoking tools. Read
 7. Produce a Physics Author spec using profiles and priors. If isolated subagents are available, ask one subagent to author only the spec and a second fresh subagent to critique only the persisted brief, reports, and spec. Do not leak the Author's reasoning to the Critic.
 8. Submit the spec, record the semantic Critic payload with `check-physics`, and obey the merged/deterministic findings. Revise at most once by applying only the requested field-level correction; never change geometry or invent a profile to silence a finding.
 9. Run `author-usd`, then `finalize` only after the visual review, combined physics review, and static inspection pass.
-10. Return only the final USD path, quality, key assumptions, and static inspection summary. Mention that Loop 2 has not run.
+10. Return only the manifest-recorded final USD path, quality, key assumptions,
+    and static inspection summary. The filename is derived from
+    `asset_brief.object_name` (for example `paper_tube.usd`); never rename it
+    independently of `finalize`. Mention that Loop 2 has not run.
 
 When the host cannot create isolated subagents, perform Author and Critic in two explicitly separated passes: persist the Author output, clear its rationale from working context as far as possible, then critique only the files listed above.

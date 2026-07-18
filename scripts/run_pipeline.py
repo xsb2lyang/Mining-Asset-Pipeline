@@ -15,7 +15,7 @@ from mining_asset_pipeline.agent.tools import AgentTools  # noqa: E402
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Agent-controlled mining asset pipeline: RGB + rough prompt -> final/asset.usd")
+    parser = argparse.ArgumentParser(description="Agent-controlled mining asset pipeline: RGB + rough prompt -> final/<object_name>.usd")
     source = parser.add_mutually_exclusive_group(required=True)
     source.add_argument("--image", type=Path, help="Input RGB image for a new asset")
     source.add_argument("--resume", metavar="ASSET_ID", help="Resume a manifest-v3 asset from its last durable phase")
@@ -95,8 +95,14 @@ def main(argv: list[str] | None = None) -> int:
     except Exception as exc:  # noqa: BLE001
         print(f"Agent pipeline failed: {type(exc).__name__}: {exc}", file=sys.stderr)
         return 1
-    final_usd = tools.store.root(asset_id) / "final" / "asset.usd"
-    if manifest.get("status") == AssetStatus.COMPLETE.value and final_usd.is_file():
+    final_usd = None
+    if manifest.get("status") == AssetStatus.COMPLETE.value:
+        try:
+            final_usd = tools.store.artifact_path(asset_id, "final_usd")
+        except (FileNotFoundError, ValueError) as exc:
+            print(f"Final USD artifact is invalid: {exc}", file=sys.stderr)
+            return 1
+    if final_usd is not None:
         print(f"asset_id={asset_id}")
         print(f"final_usd={final_usd}")
         print(f"quality={manifest.get('quality')}")

@@ -101,7 +101,7 @@ class ClaudeControllerTests(unittest.TestCase):
             with patch.dict(os.environ, {"ISAAC_SIM_PATH": str(isaac)}):
                 manifest = controller.run_new(image, AssetRequest("an unknown thing"))
             self.assertEqual(manifest["status"], AssetStatus.BLOCKED.value)
-            self.assertFalse((tools.store.root(manifest["asset_id"]) / "final" / "asset.usd").exists())
+            self.assertEqual(list((tools.store.root(manifest["asset_id"]) / "final").glob("*.usd")), [])
 
     def test_resume_skips_completed_gpu_stages(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -158,7 +158,7 @@ class ClaudeControllerTests(unittest.TestCase):
             self.assertFalse((tools.store.root(manifest["asset_id"]) / "physics" / "visual.usd").exists())
             resumed = ClaudeAssetController(tools, None).run(manifest["asset_id"])
             self.assertEqual(resumed["status"], AssetStatus.BLOCKED.value)
-            self.assertFalse((tools.store.root(manifest["asset_id"]) / "final" / "asset.usd").exists())
+            self.assertEqual(list((tools.store.root(manifest["asset_id"]) / "final").glob("*.usd")), [])
 
     def test_visual_repair_then_api_failure_blocks_instead_of_degrading(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -169,7 +169,7 @@ class ClaudeControllerTests(unittest.TestCase):
             with patch.dict(os.environ, {"ISAAC_SIM_PATH": str(isaac)}):
                 manifest = ClaudeAssetController(tools, client).run_new(image, AssetRequest("red mug", "cup"))
             self.assertEqual(manifest["status"], AssetStatus.BLOCKED.value)
-            self.assertFalse((tools.store.root(manifest["asset_id"]) / "final" / "asset.usd").exists())
+            self.assertEqual(list((tools.store.root(manifest["asset_id"]) / "final").glob("*.usd")), [])
 
     def test_visual_rerun_executes_requested_seed(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -211,7 +211,7 @@ class ClaudeControllerTests(unittest.TestCase):
             with patch.dict(os.environ, {"ISAAC_SIM_PATH": str(isaac)}):
                 manifest = ClaudeAssetController(tools, None).run_new(image, AssetRequest("a red ceramic mug", "cup"))
             self.assertEqual(manifest["status"], AssetStatus.BLOCKED.value)
-            self.assertFalse((tools.store.root(manifest["asset_id"]) / "final" / "asset.usd").exists())
+            self.assertEqual(list((tools.store.root(manifest["asset_id"]) / "final").glob("*.usd")), [])
 
 
 if __name__ == "__main__":

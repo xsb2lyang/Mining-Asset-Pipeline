@@ -120,7 +120,9 @@ class WorkflowTests(unittest.TestCase):
             with patch.dict(os.environ, {"ISAAC_SIM_PATH": str(isaac)}):
                 complete = workflow.run_physics_pipeline(asset_id)
             self.assertEqual(complete["status"], AssetStatus.COMPLETE.value)
-            self.assertTrue((workflow.store.root(asset_id) / "final" / "asset.usd").is_file())
+            final_usd = workflow.store.artifact_path(asset_id, "final_usd")
+            self.assertTrue(final_usd.is_file())
+            self.assertNotEqual(final_usd.name, "asset.usd")
             self.assertFalse((workflow.store.root(asset_id) / "visual" / "review.json").exists())
             spec = (workflow.store.root(asset_id) / "physics" / "physics_spec.yaml").read_text(encoding="utf-8")
             self.assertIn("profile: ceramic", spec)

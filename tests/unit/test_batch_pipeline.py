@@ -33,7 +33,7 @@ def _items(count: int) -> list[dict[str, object]]:
 def _completed(index: int, code: int = 0, stderr: str = "") -> subprocess.CompletedProcess[str]:
     stdout = ""
     if code == 0:
-        stdout = f"asset_id=asset-{index}\nfinal_usd=/outputs/asset-{index}/final/asset.usd\n"
+        stdout = f"asset_id=asset-{index}\nfinal_usd=/outputs/asset-{index}/final/item_{index}.usd\n"
     return subprocess.CompletedProcess(args=[], returncode=code, stdout=stdout, stderr=stderr)
 
 
@@ -65,7 +65,7 @@ class BatchPipelineTests(unittest.TestCase):
             self.assertEqual(summary["complete"], 3)
             self.assertEqual(summary["failed"], 0)
             self.assertEqual(summary["results"][0]["asset_id"], "asset-1")
-            self.assertEqual(summary["results"][2]["final_usd"], "/outputs/asset-3/final/asset.usd")
+            self.assertEqual(summary["results"][2]["final_usd"], "/outputs/asset-3/final/item_3.usd")
             self.assertEqual(run.call_count, 3)
             command = run.call_args_list[0].args[0]
             self.assertNotIn("--rewrite-prompt", run.call_args_list[0].args[0])
