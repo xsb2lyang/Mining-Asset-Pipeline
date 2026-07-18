@@ -9,6 +9,8 @@ tagged release. Dates use ISO 8601.
 
 - Release-readiness documentation, licensed sample manifests, environment
   doctor, packaging checks, and community health automation.
+- Pinned 3dgrut and WorldComposer submodules plus a reproducible Real2Sim
+  Phase 1 entry point for portable Marble scene USD packages.
 
 ### Removed
 

@@ -2,7 +2,8 @@
 
 Generate a physics-authored USD asset from one RGB image and a text prompt.
 The project combines Meta SAM3, SAM 3D Objects, a bounded asset-quality agent,
-and NVIDIA Isaac Sim 5.1.
+and NVIDIA Isaac Sim 5.1. It also includes an experimental Marble/WorldComposer
+path for building full-scene USD packages.
 
 > **Project status:** experimental `v0.2.0`. The pipeline authors geometry,
 > rendering color, rigid-body, mass/density, collision, friction, restitution,
@@ -31,6 +32,7 @@ RGB + prompt
 - Container-aware collision selection (`sdf`/`convexDecomposition`).
 - SAM3D vertex-color preservation through a USD Preview Surface.
 - Persistent manifests, inspection reports, tool logs, and physics-review records.
+- WorldComposer Real2Sim Phase 1: Marble PLY + collider GLB → portable scene USD.
 
 ## Repository layout
 
@@ -41,12 +43,16 @@ RGB + prompt
 | `configs/` | Material and collision profiles |
 | `assets/samples/` | Small, licensed reproducibility inputs |
 | `tests/` | Dependency-light unit tests and future GPU/simulation tests |
-| `third_party/` | Pinned SAM3 and SAM 3D Objects submodules |
+| `third_party/` | Pinned SAM3, SAM 3D Objects, 3dgrut and WorldComposer submodules |
 | `docs/` | Setup, architecture, workflow, and experiment records |
 | `Benchmark/` | Ignored legacy/local runtime compatibility area |
 
 Model weights, Isaac Sim, generated GLB/USD files, and API credentials are not
 stored in Git.
+
+The object pipeline and scene pipeline are independent entry points. See
+[Marble scene → USD](docs/scene_pipeline.md) for the Real2Sim Phase 1 setup,
+output package and current validation boundary.
 
 ## Requirements
 
@@ -89,6 +95,7 @@ Optional features:
 
 ```bash
 python -m pip install -e '.[llm]'     # embedded unattended Claude controller
+python -m pip install -e '.[scene]'   # optional World Labs Marble API client
 ```
 
 The supported deployment is a source checkout because the complete application

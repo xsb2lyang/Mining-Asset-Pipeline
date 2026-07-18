@@ -1,14 +1,15 @@
 # Reproducible local setup
 
 This guide prepares a fresh Linux clone for the complete RGB + prompt → USD
-workflow. The project deliberately uses three Python runtimes because the two
-model projects and Isaac Sim have incompatible CUDA/Python requirements.
+workflow. The project deliberately isolates its Python runtimes because the
+model projects, 3dgrut and Isaac Sim have incompatible CUDA/Python requirements.
 
 | Runtime | Purpose | Expected version/source |
 |---|---|---|
 | `.venv` | Orchestration, CLI, tests, optional LLM | Python 3.11 |
 | Conda `sam3` | Text-conditioned segmentation | Python 3.12; pinned SAM3 submodule |
 | Conda `sam3d-objects` | Single-image 3D reconstruction | Pinned upstream environment |
+| Conda `worldcomposer-r2s` | Optional scene PLY → NuRec transcoding | Pinned 3dgrut source |
 | Isaac Sim `python.sh` | USD conversion and physics schemas | Isaac Sim 5.1 |
 
 ## 1. Hardware and operating system
@@ -100,7 +101,18 @@ cd ../..
 If installation fails, consult the pinned upstream document first; its build
 commands are authoritative for that submodule revision.
 
-## 6. Gated checkpoints
+## 6. Optional scene Phase 1 environment
+
+Only users converting Marble PLY + collider GLB scenes need this environment:
+
+```bash
+scripts/setup_scene_phase1_env.sh
+```
+
+It is isolated from both model environments and Isaac Sim. Full instructions
+and the output package contract are in [scene_pipeline.md](scene_pipeline.md).
+
+## 7. Gated checkpoints
 
 Request access to:
 
@@ -131,7 +143,7 @@ test -f third_party/sam-3d-objects/checkpoints/hf/pipeline.yaml
 Checkpoint licenses and geographic access rules are controlled by their
 upstream providers.
 
-## 7. Isaac Sim 5.1
+## 8. Isaac Sim 5.1
 
 Install Isaac Sim outside the Git repository or under an ignored local runtime
 directory. `ISAAC_SIM_PATH` must point to a directory containing both
@@ -141,7 +153,7 @@ The workflow clears Conda, `PYTHONPATH`, `PYTHONHOME`, and `LD_LIBRARY_PATH`
 before invoking `python.sh`. This prevents PyTorch/CUDA libraries from leaking
 into Kit.
 
-## 8. Local configuration
+## 9. Local configuration
 
 ```bash
 cp environments/local.env.example environments/local.env
@@ -164,7 +176,7 @@ python scripts/doctor.py --json
 `environments/local.env` is ignored. Keep secrets in your shell or a secret
 manager, never in that file.
 
-## 9. Smoke tests
+## 10. Smoke tests
 
 Dependency-light test suite:
 
@@ -195,7 +207,7 @@ python scripts/run_pipeline.py \
   --asset-category open_container
 ```
 
-## 10. Common failures
+## 11. Common failures
 
 | Symptom | Check |
 |---|---|
@@ -206,6 +218,8 @@ python scripts/run_pipeline.py \
 | Isaac Sim rejects Conda | Use project workflow or `scripts/launch_isaac_sim.sh` |
 | USD appears grey | Ensure current converter authored `VertexColorMaterial` |
 | Container opening is sealed | Use `sdf` or `convexDecomposition`, not `convexHull` |
+| Scene PLY transcode cannot import 3dgrut | Run `scripts/setup_scene_phase1_env.sh` and check `THREEDGRUT_ENV` |
+| Scene root USD works only on its source machine | Deliver the complete `final/` package produced by `run_scene_phase1.py` |
 
 For architecture and output semantics, continue with
 [architecture.md](architecture.md) and [cli_pipeline.md](cli_pipeline.md).

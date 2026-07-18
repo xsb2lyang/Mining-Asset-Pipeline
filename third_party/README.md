@@ -7,6 +7,8 @@ code:
 |---|---|---|
 | `sam3/` | `facebookresearch/sam3` | Text-conditioned image segmentation |
 | `sam-3d-objects/` | `facebookresearch/sam-3d-objects` | Single-image 3D reconstruction |
+| `3dgrut/` | `nv-tlabs/3dgrut` | Gaussian PLY to NuRec USDZ transcoding |
+| `WorldComposer/` | `jaber628/WorldComposer` | Real2Sim Phase 1 scene assembly |
 
 Initialize them with:
 

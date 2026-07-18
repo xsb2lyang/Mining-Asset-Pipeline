@@ -15,6 +15,10 @@ with Isaac Sim's `python.sh`, not the current conda Python.
 | `run_pipeline.py` | Embedded Agent CLI: image + rough prompt → `final/<object_name>.usd` |
 | `batch_pipeline.py` | Batch wrapper: JSON manifest → one independent USD asset per entry + summary JSON |
 | `doctor.py` | Check local packages, Conda environments, checkpoints, GPU tools, and Isaac Sim |
+| `setup_scene_phase1_env.sh` | Create the isolated, constrained 3dgrut transcoder environment |
+| `generate_marble_world.py` | Optional Marble API acquisition: RGB → PLY + collider GLB |
+| `run_scene_phase1.py` | Marble PLY + collider GLB → portable WorldComposer Phase 1 scene package |
+| `scene_phase1_isaac.py` | Internal Isaac Sim helper used by `run_scene_phase1.py` |
 
 Example:
 
@@ -46,6 +50,18 @@ USD authoring stage invokes Isaac Sim's `python.sh`.
 
 See [the asset-quality workflow](../docs/asset_quality_agent.md) for the
 automatic visual checks and Physics Author/Critic stages.
+
+For full-scene conversion, use only the public orchestrator:
+
+```bash
+python scripts/run_scene_phase1.py \
+  --ply local_data/scene_inputs/example/scene.ply \
+  --glb local_data/scene_inputs/example/collider.glb \
+  --scene-name "example tunnel"
+```
+
+See [the scene pipeline guide](../docs/scene_pipeline.md). Do not invoke
+`scene_phase1_isaac.py` directly except while debugging the Isaac stage.
 
 Before a real run, check the complete local installation:
 

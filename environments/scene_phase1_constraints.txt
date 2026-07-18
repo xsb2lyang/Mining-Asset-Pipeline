@@ -1,0 +1,18 @@
+# Compatibility pins validated for the 3dgrut NuRec transcoder in Phase 1.
+# The pinned 3dgrut submodule remains the authoritative dependency declaration;
+# these constraints prevent known zarr/numcodecs and PyTorch drift.
+setuptools==78.1.1
+torch==2.5.1+cu121
+torchvision==0.20.1+cu121
+numpy==1.26.4
+usd-core==26.5
+nvidia-ncore==19.5.0
+kornia==0.8.2
+zarr==2.18.7
+numcodecs==0.15.1
+universal-pathlib==0.3.10
+plyfile==1.1.3
+Pillow==11.3.0
+PyYAML==6.0.3
+tqdm==4.68.4
+opencv-python==4.9.0.80
