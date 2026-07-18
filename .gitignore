@@ -59,6 +59,10 @@ venv/
 .vscode/
 .idea/
 
+# macOS Finder / AppleDouble metadata
+.DS_Store
+._*
+
 # Isaac Sim / Omniverse caches
 _build/
 _out/
