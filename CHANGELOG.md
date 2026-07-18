@@ -14,6 +14,13 @@ tagged release. Dates use ISO 8601.
 
 - The optional Gradio web interface; the supported execution paths are now the
   single-asset and batch CLIs.
+- The obsolete stdout-only `validate_asset.py`; static validation now uses
+  `inspect_physics.py` exclusively.
+
+### Changed
+
+- Moved early workstation and red-mug experiment notes into `docs/archive/` so
+  current setup and CLI documentation remain the primary user path.
 
 ## [0.1.0] - 2026-07-18
 

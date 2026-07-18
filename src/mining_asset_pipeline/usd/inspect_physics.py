@@ -1,13 +1,13 @@
 """Static USD schema inspector (Kit-bootstrapped).
 
 Bootstraps via ``isaacsim.SimulationApp`` so that ``pxr``/UsdPhysics schema
-plugins are registered, then writes a JSON report to ``--out``. The original
-``validate_asset.py`` has the same logic but relies on stdout, which Kit
-intercepts in headless mode.
+plugins are registered, then writes a JSON report to ``--out``. Writing the
+report to disk avoids relying on stdout, which Kit can intercept in headless
+mode.
 
 Usage::
 
-    /path/to/isaac-sim-5.1.0/python.sh asset_pipeline/isaac/inspect_physics.py \\
+    /path/to/isaac-sim-5.1.0/python.sh scripts/inspect_physics.py \\
         --input mug_physics.usd \\
         --out   mug_physics_report.json
 """

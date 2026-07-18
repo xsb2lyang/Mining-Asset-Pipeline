@@ -14,7 +14,7 @@ legacy pipeline entry points.
 - Initialize the SAM3 and SAM3D submodules.
 - Install the local `sam3` and `sam3d-objects` Conda environments.
 - Set `SAM3_CHECKPOINT_DIR` and `ISAAC_SIM_PATH` as described in
-  [setup.md](setup.md).
+  [setup.md](../setup.md).
 - The local red-mug image used in this run is intentionally ignored by Git:
   `Benchmark/Assest_maker/outputs/sam3d_test/images/red_mug.jpg`.
 

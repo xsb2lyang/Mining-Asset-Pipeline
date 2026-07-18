@@ -1,7 +1,7 @@
 # SAM3 + SAM3D Objects 小 Pipeline 试跑记录
 
 > **历史实验记录:** 原始红杯输入和生成物不随仓库分发。新用户应按照
-> `docs/setup.md` 配置环境，并使用 `assets/samples/` 中有明确许可的输入。
+> [当前安装文档](../setup.md)配置环境，并使用 `assets/samples/` 中有明确许可的输入。
 
 > 跑通情况:**自检 SAM3 → SAM3D Objects 端到端小 pipeline**,产出 OBJ / GLB / PLY 三份 3D 文件
 > 记录人:Claude(模型 `claude-opus-4-8`)
@@ -165,7 +165,7 @@ mug.glb : vertices=566790  faces=1134560
 
 | 决策 | 原因 |
 |---|---|
-| 两个环境分开跑 | [`setup.md`](setup.md) 记录 SAM3 在 `sam3`、SAM3D 在 `sam3d-objects`;两者 PyTorch 与 CUDA 版本不同 |
+| 两个环境分开跑 | [`setup.md`](../setup.md) 记录 SAM3 在 `sam3`、SAM3D 在 `sam3d-objects`;两者 PyTorch 与 CUDA 版本不同 |
 | 不用 `load_from_HF=True` | 仓库已下好 `sam3.pt`(3.3 GB),免授权 |
 | SAM3D 用源代直跑 | 仓库 `sam3d_objects` 包没有 `pip install`,直接 `sys.path.append("notebook")` |
 | 强转 fp32 + 替换 fused kernel | 修复 bf16 / fp32 dtype 不匹配(详见第 6 节) |
@@ -363,7 +363,7 @@ conda run -n sam3d-objects python scripts/run_sam3d.py \
 
 | 来源 | 用途 |
 |---|---|
-| [`docs/setup.md`](setup.md) | 确认双环境、HF 权限与权重下载方式 |
+| [`docs/setup.md`](../setup.md) | 确认双环境、HF 权限与权重下载方式 |
 | `third_party/sam3/README.md` | SAM3 文本/视觉 prompt API 范式 |
 | `third_party/sam-3d-objects/README.md` | SAM3D inference 接口、output 键含义 |
 | `third_party/sam3/sam3/perflib/fused.py` | 找到 bf16 hard-cast 的源头 |

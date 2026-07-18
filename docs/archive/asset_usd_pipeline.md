@@ -1,11 +1,13 @@
 # 资产 USD 化 / 物理化 试跑记录
 
 > **历史实验记录:** 本文保留 2026-07-12 的参数推理过程，不是当前 CLI
-> 使用手册。原始红杯输出已清理；当前命令见 `docs/cli_pipeline.md`。
+> 使用手册。原始红杯输出已清理；当前命令见
+> [CLI Pipeline](../cli_pipeline.md)。文中 `validate_asset.py` 已被删除，
+> 当前统一使用 `inspect_physics.py`。
 > 对开口容器，当前策略必须使用 `sdf` 或 `convexDecomposition`，不能使用
 > 会封住开口的 `convexHull`。
 
-> 配合 `docs/sam3_to_sam3d_pipeline.md`:本笔记衔接 SAM3D 输出(`mug.{glb,obj}`)→ USD → 物理化 → 静态校验。
+> 配合 `sam3_to_sam3d_pipeline.md`:本笔记衔接 SAM3D 输出(`mug.{glb,obj}`)→ USD → 物理化 → 静态校验。
 > 跑通时间:2026-07-12
 
 ---

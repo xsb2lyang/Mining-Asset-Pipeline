@@ -84,7 +84,7 @@ class RepositoryLayoutTests(unittest.TestCase):
         self.assertFalse((ROOT / "src" / "mining_asset_pipeline" / "agent" / "web.py").exists())
 
     def test_public_docs_do_not_contain_maintainer_absolute_path(self) -> None:
-        public_files = [ROOT / "README.md", *(ROOT / "docs").glob("*.md")]
+        public_files = [ROOT / "README.md", *(ROOT / "docs").rglob("*.md")]
         for path in public_files:
             self.assertNotIn("/home/user/Xsb_WS", path.read_text(encoding="utf-8"), str(path))
 
@@ -95,7 +95,7 @@ class RepositoryLayoutTests(unittest.TestCase):
             ROOT / "SECURITY.md",
             ROOT / "SUPPORT.md",
             ROOT / "THIRD_PARTY_NOTICES.md",
-            *(ROOT / "docs").glob("*.md"),
+            *(ROOT / "docs").rglob("*.md"),
             *(ROOT / "assets" / "samples").glob("*.md"),
         ]
         link_pattern = re.compile(r"\[[^\]]+\]\(([^)]+)\)")

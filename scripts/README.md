@@ -9,7 +9,6 @@ with Isaac Sim's `python.sh`, not the current conda Python.
 | `prepare_physics.py` | Add baseline rigid body, mass/density, and collision settings |
 | `apply_physics_material.py` | Add friction, restitution, damping, CCD, and contact parameters |
 | `inspect_physics.py` | Write a static USD physics validation report |
-| `validate_asset.py` | Original stdout-based validator |
 | `run_sam3.py` | Create a text-conditioned mask from an RGB image (SAM3 env) |
 | `run_sam3d.py` | Reconstruct GLB/OBJ/PLY from an RGB image and mask (SAM3D env) |
 | `run_pipeline.py` | Unattended CLI: image + prompt → `final/asset.usd` (no human in the loop) |
