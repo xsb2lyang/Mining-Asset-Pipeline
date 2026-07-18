@@ -37,9 +37,11 @@ class RepositoryLayoutTests(unittest.TestCase):
             "assets/samples/batch_manifest.json",
             "scripts/launch_isaac_sim.sh",
             "scripts/doctor.py",
+            "scripts/asset_tool.py",
             "scripts/run_sam3.py",
             "scripts/run_sam3d.py",
             "src/mining_asset_pipeline/agent/workflow.py",
+            ".agents/skills/generate-mining-asset/SKILL.md",
         ):
             self.assertTrue((ROOT / relative_path).is_file(), relative_path)
 
@@ -82,6 +84,18 @@ class RepositoryLayoutTests(unittest.TestCase):
     def test_removed_web_ui_is_not_part_of_the_public_repository(self) -> None:
         self.assertFalse((ROOT / "scripts" / "launch_asset_agent.py").exists())
         self.assertFalse((ROOT / "src" / "mining_asset_pipeline" / "agent" / "web.py").exists())
+
+    def test_agent_skill_has_one_canonical_body_and_claude_discovery_link(self) -> None:
+        canonical = ROOT / ".agents" / "skills" / "generate-mining-asset"
+        claude = ROOT / ".claude" / "skills" / "generate-mining-asset"
+        self.assertTrue(canonical.is_dir())
+        self.assertTrue(claude.is_symlink())
+        self.assertEqual(claude.resolve(), canonical.resolve())
+        frontmatter = (canonical / "SKILL.md").read_text(encoding="utf-8").split("---", 2)[1]
+        self.assertIn("name: generate-mining-asset", frontmatter)
+        self.assertIn("description:", frontmatter)
+        for reference in ("tool-contract.md", "quality-policy.md", "role-prompts.md"):
+            self.assertTrue((canonical / "references" / reference).is_file())
 
     def test_public_docs_do_not_contain_maintainer_absolute_path(self) -> None:
         public_files = [ROOT / "README.md", *(ROOT / "docs").rglob("*.md")]

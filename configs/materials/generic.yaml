@@ -6,3 +6,5 @@ dynamic_friction: 0.4
 restitution: 0.05
 friction_combine_mode: average
 restitution_combine_mode: average
+applicable_categories: [unknown]
+source: Conservative placeholder only; generic profiles cannot be delivered through degraded fallback.

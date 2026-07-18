@@ -1,0 +1,7 @@
+name: slender_solid
+preferred_approximation: convexHull
+fallback_approximation: convexDecomposition
+production_strategy: single_collider
+notes:
+  - Suitable for solid rods, bolts, and pipes whose cavity is not task relevant.
+  - Enable CCD for thin, small, or fast-moving uses.

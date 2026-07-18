@@ -18,6 +18,7 @@
 # -----------------------------------------------------------------------------
 /Benchmark/Assest_maker/outputs/
 /outputs/
+/.claude/settings.local.json
 /runs/
 /logs/
 /artifacts/

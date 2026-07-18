@@ -57,6 +57,7 @@ class FakeRunner:
             out.mkdir(parents=True, exist_ok=True)
             (out / "mug.glb").write_bytes(_glb_bytes())
             (out / "summary.json").write_text("{}", encoding="utf-8")
+            Image.new("RGB", (20, 20), "gray").save(out / "views.png")
         elif name == "inspect_physics":
             out = value("--out")
             out.parent.mkdir(parents=True, exist_ok=True)
@@ -97,8 +98,8 @@ class AssetStoreTests(unittest.TestCase):
             store = AssetStore(root / "outputs")
             asset_id = store.create(image, AssetRequest(prompt="rock"))
             bundle = store.root(asset_id)
-            self.assertEqual(store.manifest(asset_id)["schema_version"], 2)
-            self.assertEqual(set(path.name for path in bundle.iterdir()), {"input", "visual", "physics", "final", "request.json", "manifest.json"})
+            self.assertEqual(store.manifest(asset_id)["schema_version"], 3)
+            self.assertEqual(set(path.name for path in bundle.iterdir()), {"input", "agent", "visual", "physics", "final", "request.json", "manifest.json"})
             with self.assertRaises(ValueError):
                 store.transition(asset_id, AssetStatus.COMPLETE, "skip")
 
@@ -169,6 +170,23 @@ class PhysicsAgentTests(unittest.TestCase):
         revised = author.revise(spec, first_review.findings)
         self.assertEqual(revised["collision"]["approximation"], "sdf")
         self.assertTrue(critic.review(revised).accepted)
+
+    def test_critic_rejects_nonfinite_values_unknown_profiles_and_container_hull(self) -> None:
+        spec = {
+            "schema_version": 1,
+            "asset": {"prompt": "a ceramic mug", "category": "cup"},
+            "material": {"profile": "invented", "density_kg_m3": float("nan"), "static_friction": float("nan"), "dynamic_friction": 0.4, "restitution": 0.1, "friction_combine_mode": "average", "restitution_combine_mode": "average"},
+            "mass": {"mode": "density", "density_kg_m3": float("nan")},
+            "collision": {"profile": "generic_solid", "enabled": True, "approximation": "convexHull"},
+            "rigid_body": {"enabled": True, "enable_ccd": False, "disable_gravity": False, "linear_damping": 0.0, "angular_damping": 0.0},
+        }
+        review = PhysicsCriticAgent().review(spec)
+        self.assertFalse(review.accepted)
+        codes = {item["code"] for item in review.findings}
+        self.assertIn("material.unknown_profile", codes)
+        self.assertIn("material.friction_order", codes)
+        self.assertIn("mass.invalid", codes)
+        self.assertIn("collision.container_sealed", codes)
 
 
 class InspectionTests(unittest.TestCase):

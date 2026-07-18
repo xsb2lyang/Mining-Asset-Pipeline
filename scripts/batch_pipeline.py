@@ -74,8 +74,6 @@ def _load_manifest(path: Path) -> list[dict[str, Any]]:
         for field in ("asset_category", "target_task", "robot_constraints"):
             if field in item and not isinstance(item[field], str):
                 raise ValueError(f"Manifest entry {index} field '{field}' must be a string")
-        if "rewrite_prompt" in item and not isinstance(item["rewrite_prompt"], bool):
-            raise ValueError(f"Manifest entry {index} field 'rewrite_prompt' must be a boolean")
     return payload
 
 
@@ -119,8 +117,6 @@ def run_one(item: dict[str, Any], output_root: Path, isaac_sim_path: Path | None
             command.extend((flag, item[field]))
     if isaac_sim_path is not None:
         command.extend(("--isaac-sim-path", str(isaac_sim_path)))
-    if item.get("rewrite_prompt", False):
-        command.append("--rewrite-prompt")
 
     try:
         completed = subprocess.run(

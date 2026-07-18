@@ -1,0 +1,9 @@
+name: steel
+density_kg_m3: 7850
+static_friction: 0.6
+dynamic_friction: 0.5
+restitution: 0.05
+friction_combine_mode: average
+restitution_combine_mode: max
+applicable_categories: [rod, bolt, drill_rod, cart, tool, machine_part]
+source: Engineering prior; validate against the actual alloy and surface finish.

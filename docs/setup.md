@@ -56,8 +56,10 @@ python -m pip install -e '.[llm]'
 python -m pip install -e '.[dev]'
 ```
 
-The Anthropic SDK is optional. No API key is required for the deterministic
-pipeline or for tests.
+The Anthropic SDK is optional. No project API key is required for the
+repository Skill or for tests. The unattended embedded controller reads
+`ANTHROPIC_API_KEY` only from the shell; without it, specialized deterministic
+fallback may produce `quality=degraded`, while generic assets are blocked.
 
 ## 4. SAM3 environment
 

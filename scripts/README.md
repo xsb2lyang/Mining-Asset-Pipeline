@@ -11,7 +11,8 @@ with Isaac Sim's `python.sh`, not the current conda Python.
 | `inspect_physics.py` | Write a static USD physics validation report |
 | `run_sam3.py` | Create a text-conditioned mask from an RGB image (SAM3 env) |
 | `run_sam3d.py` | Reconstruct GLB/OBJ/PLY from an RGB image and mask (SAM3D env) |
-| `run_pipeline.py` | Unattended CLI: image + prompt → `final/asset.usd` (no human in the loop) |
+| `asset_tool.py` | Internal machine-readable whitelist shared by repository Skills and controllers |
+| `run_pipeline.py` | Embedded Agent CLI: image + rough prompt → `final/asset.usd` |
 | `batch_pipeline.py` | Batch wrapper: JSON manifest → one independent USD asset per entry + summary JSON |
 | `doctor.py` | Check local packages, Conda environments, checkpoints, GPU tools, and Isaac Sim |
 
@@ -39,8 +40,7 @@ python scripts/run_pipeline.py \
   --asset-category open_container
 ```
 
-Exit codes: `0` complete (writes `final/asset.usd`) / `2` blocked
-(Author/Critic did not converge in 3 rounds) / `1` any other failure.
+Exit codes: `0` complete (writes `final/asset.usd`) / `2` blocked / `1` any other failure.
 `ISAAC_SIM_PATH` (env var or `--isaac-sim-path`) is required because the
 USD authoring stage invokes Isaac Sim's `python.sh`.
 

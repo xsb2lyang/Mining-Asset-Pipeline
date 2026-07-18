@@ -1,0 +1,9 @@
+name: copper
+density_kg_m3: 8960
+static_friction: 0.55
+dynamic_friction: 0.45
+restitution: 0.05
+friction_combine_mode: average
+restitution_combine_mode: max
+applicable_categories: [cable, conductor, copper_part]
+source: Engineering prior for copper; not a measurement.

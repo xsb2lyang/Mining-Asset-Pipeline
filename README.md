@@ -4,7 +4,7 @@ Generate a physics-authored USD asset from one RGB image and a text prompt.
 The project combines Meta SAM3, SAM 3D Objects, a bounded asset-quality agent,
 and NVIDIA Isaac Sim 5.1.
 
-> **Project status:** experimental `v0.1.0`. The pipeline authors geometry,
+> **Project status:** experimental `v0.2.0`. The pipeline authors geometry,
 > rendering color, rigid-body, mass/density, collision, friction, restitution,
 > damping, and CCD attributes, then performs static USD checks. Dynamic
 > drop/push/grasp validation is planned for Loop 2, so “complete” currently
@@ -16,15 +16,18 @@ and NVIDIA Isaac Sim 5.1.
 RGB + prompt
   → SAM3 text-conditioned segmentation
   → SAM 3D Objects reconstruction (GLB)
-  → deterministic visual quality gate
-  → Physics Author / Critic review (rules, optional Claude critic)
+  → semantic visual Agent review with bounded repairs
+  → isolated Physics Author / Critic review plus deterministic veto
   → GLB → visual.usd → physics.usd → simulation_ready.usd
   → static physics inspection → final/asset.usd
 ```
 
 - Unattended single-asset and batch command-line workflows.
 - Batch manifest runner with one isolated output bundle per input.
-- Deterministic physics fallback when the optional LLM is unavailable.
+- Two control planes: a repository Skill for Codex/Claude Code and an embedded
+  Claude API controller for unattended execution.
+- Deterministic specialized fallback when the optional API is unavailable;
+  generic fallback is blocked rather than silently delivered.
 - Container-aware collision selection (`sdf`/`convexDecomposition`).
 - SAM3D vertex-color preservation through a USD Preview Surface.
 - Persistent manifests, inspection reports, tool logs, and physics-review records.
@@ -85,7 +88,7 @@ python -m pip install -e .
 Optional features:
 
 ```bash
-python -m pip install -e '.[llm]'     # Claude physics critic
+python -m pip install -e '.[llm]'     # embedded unattended Claude controller
 ```
 
 The supported deployment is a source checkout because the complete application
@@ -172,7 +175,14 @@ python scripts/batch_pipeline.py \
   --continue-on-error
 ```
 
-### Optional Claude physics critic
+### Repository Skill (no project API call)
+
+Open the repository in Codex or Claude Code and invoke
+`generate-mining-asset` with the image path and rough prompt. The canonical
+Skill lives in `.agents/skills/generate-mining-asset`; its controlled tools do
+not import Anthropic or read `ANTHROPIC_API_KEY`.
+
+### Embedded Claude controller
 
 ```bash
 python -m pip install -e '.[llm]'
@@ -182,12 +192,13 @@ export ANTHROPIC_MODEL='a-model-available-to-your-account'
 python scripts/run_pipeline.py \
   --image assets/samples/paper_tube_rgb.png \
   --prompt "a cardboard tube" \
-  --asset-category open_container \
-  --use-llm-critic
+  --asset-category open_container
 ```
 
-If the SDK, key, API, response, or network fails, the workflow records the
-fallback and continues with the deterministic critic.
+No enable flag or CLI key argument exists. The controller reads the key only
+from the environment. If the SDK, key, API, response, or network fails, the
+workflow records the fallback; only specialized deterministic profiles may be
+delivered with `quality=degraded`.
 
 ## Output contract
 
@@ -195,16 +206,18 @@ fallback and continues with the deterministic critic.
 outputs/<asset-id>/
 ├── manifest.json
 ├── request.json
+├── agent/         # semantic brief, structured decisions, trace
 ├── input/
-├── visual/        # mask, GLB, previews, deterministic reports
-├── physics/       # specs, critic reviews, USD stages, static inspection
+├── visual/        # immutable SAM3/SAM3D attempts and selected review
+├── physics/       # Author/Critic records, USD stages, static inspection
 └── final/
     ├── asset.usd
     └── asset_report.json
 ```
 
-All paths stored in a manifest are relative to the asset bundle. Exit codes are
-`0` for complete, `2` for blocked physics review, and `1` for failure.
+All paths stored in a manifest are relative to the asset bundle. Manifest v3
+separates status, phase, and quality. Exit codes are `0` for complete, `2` for
+blocked, and `1` for failure.
 
 ## Tests
 
@@ -222,10 +235,8 @@ GitHub-hosted CI.
 ## Known limitations
 
 - Single-image reconstruction cannot recover fully occluded geometry reliably.
-- Visual QA is deterministic: failed SAM3/SAM3D checks stop the pipeline, while
-  passing checks continue directly to physics review. The checks do not judge
-  every semantic or aesthetic defect.
-- Physics priors are currently limited and are not a substitute for measured
+- Single-image semantic review still cannot prove occluded geometry.
+- Physics priors are not a substitute for measured
   material or inertial data.
 - Static USD checks do not prove stable contact, containment, graspability, or
   task success. These belong to Loop 2.

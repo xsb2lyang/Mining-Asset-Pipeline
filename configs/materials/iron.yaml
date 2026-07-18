@@ -1,0 +1,9 @@
+name: iron
+density_kg_m3: 7500
+static_friction: 0.6
+dynamic_friction: 0.5
+restitution: 0.05
+friction_combine_mode: average
+restitution_combine_mode: max
+applicable_categories: [tool, machine_part, cast_part]
+source: Engineering prior for iron assets; not a measurement.

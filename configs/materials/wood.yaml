@@ -1,0 +1,9 @@
+name: wood
+density_kg_m3: 700
+static_friction: 0.55
+dynamic_friction: 0.45
+restitution: 0.1
+friction_combine_mode: average
+restitution_combine_mode: max
+applicable_categories: [cardboard_tube, crate, pallet, wood_part]
+source: Wood/cardboard prior; moisture and construction are not measured.

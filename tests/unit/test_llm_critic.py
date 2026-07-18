@@ -20,6 +20,8 @@ def _valid_spec() -> dict:
         "schema_version": 1,
         "asset": {"prompt": "a ceramic mug", "category": "cup"},
         "material": {
+            "profile": "ceramic",
+            "density_kg_m3": 2500,
             "static_friction": 0.5,
             "dynamic_friction": 0.4,
             "restitution": 0.05,

@@ -1,0 +1,9 @@
+name: rubber
+density_kg_m3: 1100
+static_friction: 0.9
+dynamic_friction: 0.8
+restitution: 0.2
+friction_combine_mode: max
+restitution_combine_mode: max
+applicable_categories: [tire, wheel, seal, rubber_part]
+source: Broad rubber prior; friction varies strongly with compound and surface.

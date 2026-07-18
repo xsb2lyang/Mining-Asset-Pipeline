@@ -35,6 +35,7 @@ jobs:
       - name: Check command-line entry points
         run: |
           python scripts/run_pipeline.py --help >/dev/null
+          python scripts/asset_tool.py --help >/dev/null
           python scripts/batch_pipeline.py --help >/dev/null
           python scripts/doctor.py --help >/dev/null
       - name: Check whitespace

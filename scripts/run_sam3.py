@@ -18,7 +18,7 @@ warnings.filterwarnings("ignore")
 
 import numpy as np
 import torch
-from PIL import Image
+from PIL import Image, ImageDraw
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_OUTPUT_ROOT = Path(os.environ.get("PIPELINE_OUTPUT_DIR", REPO_ROOT / "outputs"))
@@ -110,6 +110,8 @@ def main() -> int:
     for i, s in enumerate(scores_np):
         print(f"  - candidate[{i}] score={float(s):.3f} box={boxes_np[i].tolist()}")
 
+    if len(scores_np) == 0:
+        raise RuntimeError(f"SAM3 produced no candidates for prompt {args.prompt!r}")
     best = int(np.argmax(scores_np)) if args.candidate_index is None else args.candidate_index
     if best < 0 or best >= len(scores_np):
         raise ValueError(f"--candidate-index must be in [0, {len(scores_np) - 1}]")
@@ -133,6 +135,26 @@ def main() -> int:
     viz = (0.5 * rgb + 0.5 * overlay).astype(np.uint8)
     Image.fromarray(viz).save(out_preview)
     print(f"[SAM3] wrote {out_preview}")
+
+    # A single image lets a remote or host Agent compare candidates without
+    # relying on browser UI state.
+    tiles = []
+    for index, candidate in enumerate(masks_np > 0):
+        tint = np.zeros_like(rgb)
+        tint[candidate] = (0, 255, 0)
+        tile = Image.fromarray((0.55 * rgb + 0.45 * tint).astype(np.uint8)).resize((320, 320))
+        draw = ImageDraw.Draw(tile)
+        draw.rectangle((0, 0, 160, 28), fill=(0, 0, 0))
+        draw.text((8, 7), f"candidate {index}  {float(scores_np[index]):.3f}", fill=(255, 255, 255))
+        tiles.append(tile)
+    columns = min(3, len(tiles))
+    rows = (len(tiles) + columns - 1) // columns
+    sheet = Image.new("RGB", (columns * 320, rows * 320), (240, 240, 240))
+    for index, tile in enumerate(tiles):
+        sheet.paste(tile, ((index % columns) * 320, (index // columns) * 320))
+    sheet_path = args.out_dir / "candidates.png"
+    sheet.save(sheet_path)
+    print(f"[SAM3] wrote {sheet_path}")
 
     with open(out_meta, "w") as f:
         json.dump({

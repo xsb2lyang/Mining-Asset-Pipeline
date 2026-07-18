@@ -25,7 +25,6 @@ def _items(count: int) -> list[dict[str, object]]:
             "image": f"/dataset/item_{index}.jpg",
             "prompt": f"asset {index}",
             "asset_category": "trolley",
-            "rewrite_prompt": index == 1,
         }
         for index in range(1, count + 1)
     ]
@@ -69,7 +68,7 @@ class BatchPipelineTests(unittest.TestCase):
             self.assertEqual(summary["results"][2]["final_usd"], "/outputs/asset-3/final/asset.usd")
             self.assertEqual(run.call_count, 3)
             command = run.call_args_list[0].args[0]
-            self.assertIn("--rewrite-prompt", run.call_args_list[0].args[0])
+            self.assertNotIn("--rewrite-prompt", run.call_args_list[0].args[0])
             self.assertIn("--isaac-sim-path", command)
             self.assertIn(str(isaac), command)
             env = run.call_args_list[0].kwargs["env"]

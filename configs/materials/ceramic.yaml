@@ -6,3 +6,5 @@ dynamic_friction: 0.4
 restitution: 0.05
 friction_combine_mode: average
 restitution_combine_mode: max
+applicable_categories: [cup, mug, vessel, ceramic_prop]
+source: Broad rigid-ceramic engineering prior; not a measurement.

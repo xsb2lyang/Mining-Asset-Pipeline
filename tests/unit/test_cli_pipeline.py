@@ -99,6 +99,12 @@ class CliArgparseTests(unittest.TestCase):
         self.assertIn("--image", result.stdout)
         self.assertIn("--prompt", result.stdout)
         self.assertIn("--isaac-sim-path", result.stdout)
+        self.assertIn("--resume", result.stdout)
+        self.assertIn("--model", result.stdout)
+        self.assertIn("--max-llm-calls", result.stdout)
+        self.assertNotIn("--rewrite-prompt", result.stdout)
+        self.assertNotIn("--use-llm-critic", result.stdout)
+        self.assertNotIn("--anthropic-api-key", result.stdout)
 
     def test_missing_image_exits_with_error(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

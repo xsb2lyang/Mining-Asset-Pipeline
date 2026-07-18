@@ -21,7 +21,7 @@ mass:
   # Select exactly one mode. prepare_physics.py receives --density or --mass.
   mode: density
   density_kg_m3: 1000.0
-  # mass_kg: null
+  mass_kg: null
 collision:
   profile: generic_solid
   enabled: true

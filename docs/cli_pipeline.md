@@ -1,48 +1,49 @@
-# Command-line pipeline
+# Command-line and Agent workflow
 
-This is the authoritative reference for the unattended and batch command-line
-interfaces. For installation, start with [setup.md](setup.md).
+This is the public contract for the dual-control-plane asset Agent. Installation is in [setup.md](setup.md).
 
 ## Workflow
 
 ```text
-create bundle
-  → SAM3 segmentation and deterministic candidate checks
-  → SAM3D reconstruction (up to three meaningful seed attempts)
-  → deterministic visual quality gate
-  → Physics Author writes spec
-  → Physics Critic accepts or requests bounded revision (maximum 3 rounds)
-  → GLB → visual.usd
-  → rigid body + mass/density + collision → physics.usd
-  → physics material + damping + CCD → simulation_ready.usd
-  → static inspection → final/asset.usd
+RGB + rough prompt
+  → Input Analyst / asset brief
+  → SAM3 attempts + candidate contact sheet + Visual Critic
+  → SAM3D seeds 42/43/44 + four-view contact sheet + Visual Critic
+  → isolated Physics Author / Critic + deterministic veto
+  → GLB → visual.usd → physics.usd → simulation_ready.usd
+  → authored-value static inspection → final/asset.usd
 ```
 
-Passing visual checks continue directly into physics review. A failed mask or
-mesh check sets the task status to `failed`, records the issue in
-`manifest.json`, and exits without authoring physics or USD files.
+Manifest v3 uses independent dimensions:
 
 ```text
-created → visual_running → physics_review_running → usd_running → complete
-                         ↘ failed                  ↘ failed
-                              physics review → blocked
+status:  created | running | complete | blocked | failed
+phase:   input_analysis | segmentation | reconstruction | visual_review |
+         physics_authoring | physics_review | usd_authoring |
+         static_validation | finalization
+quality: pending | agent_reviewed | degraded
 ```
 
-## Prerequisites
+Old manifests remain readable but cannot be resumed.
+
+## Control plane A: repository Skill
+
+Codex discovers `.agents/skills/generate-mining-asset`; Claude Code discovers the linked `.claude/skills/generate-mining-asset`. Invoke the Skill with an RGB path and rough prompt. It drives only `scripts/asset_tool.py` actions and never reads a project API key.
+
+The internal tool CLI is machine-readable:
 
 ```bash
-source .venv/bin/activate
-source environments/local.env
-python scripts/doctor.py
+python scripts/asset_tool.py --help
 ```
 
-The workflow invokes SAM3 and SAM3D through their Conda environments and Isaac
-Sim through its own `python.sh`. It strips incompatible Conda/CUDA environment
-variables from Isaac subprocesses automatically.
+Its exact subcommands and payload contracts are documented inside the Skill at `references/tool-contract.md`.
 
-## Single asset
+## Control plane B: embedded Claude API Agent
 
 ```bash
+python -m pip install -e '.[llm]'
+export ANTHROPIC_API_KEY='set-in-shell-only'
+
 python scripts/run_pipeline.py \
   --image assets/samples/paper_tube_rgb.png \
   --prompt "a cardboard tube" \
@@ -53,68 +54,41 @@ Arguments:
 
 | Argument | Required/default | Meaning |
 |---|---|---|
-| `--image` | required | Input RGB image |
-| `--prompt` | required | Concrete text prompt for segmentation |
-| `--asset-category` | empty | Semantic category for physics policy |
-| `--target-task` | empty | Task hint persisted in the request |
-| `--robot-constraints` | empty | Robot constraint hint persisted in the request |
-| `--output-root` | `$PIPELINE_OUTPUT_DIR` or `outputs/` | Bundle root |
+| `--image` | new task | Input RGB image |
+| `--prompt` | with `--image` | Rough user prompt; the Agent normalizes it |
+| `--resume <asset-id>` | alternative to `--image` | Resume a schema-v3 task without repeating successful GPU stages |
+| `--asset-category` | empty | Optional semantic hint |
+| `--target-task` | empty | Optional task hint |
+| `--robot-constraints` | empty | Optional robot hint |
+| `--output-root` | `$PIPELINE_OUTPUT_DIR` or `outputs/` | Asset bundle root |
 | `--isaac-sim-path` | `$ISAAC_SIM_PATH` | Isaac Sim root containing `python.sh` |
-| `--sam3-env` | `$SAM3_ENV` or `sam3` | Conda environment name |
-| `--sam3d-env` | `$SAM3D_ENV` or `sam3d-objects` | Conda environment name |
-| `--rewrite-prompt` | false | Apply deterministic concrete-noun rewriting |
-| `--use-llm-critic` | false | Request optional Claude physics review |
-| `--anthropic-api-key` | `$ANTHROPIC_API_KEY` | API key; never persisted |
-| `--anthropic-model` | `$ANTHROPIC_MODEL` or code default | Model identifier |
-| `--quiet` | false | Suppress stage progress |
+| `--sam3-env` | `$SAM3_ENV`, local config, or `sam3` | SAM3 Conda environment |
+| `--sam3d-env` | `$SAM3D_ENV`, local config, or `sam3d-objects` | SAM3D Conda environment |
+| `--model` | `$ANTHROPIC_MODEL` or `claude-sonnet-5` | Embedded controller model |
+| `--max-llm-calls` | 8 | Per-asset structured call budget |
+| `--quiet` | false | Suppress non-result progress |
 
-Exit codes:
+There is deliberately no API-key CLI argument: credentials come only from the environment. There are no `--rewrite-prompt` or `--use-llm-critic` switches; normalization and role selection belong to the controller.
 
-| Code | State | Contract |
-|---:|---|---|
-| `0` | `complete` | `final/asset.usd` exists and static checks passed |
-| `2` | `blocked` | Physics review did not converge; no final USD |
-| `1` | `failed`/invalid | Tool, input, environment, or unexpected-state failure |
+The maximum eight calls are allocated as Input Analyst 1, Visual Critic 3, Physics Author 2, and Physics Critic 2. Calls use base64 image blocks and JSON-schema structured output. Any API/SDK/parse failure is audited and disables subsequent remote calls for that run.
 
-On success, stdout ends with machine-readable lines:
+On success stdout contains:
 
 ```text
 asset_id=<asset-id>
 final_usd=<absolute-path>/final/asset.usd
+quality=agent_reviewed|degraded
 ```
 
-## Prompt guidance
+Exit codes are 0 complete, 2 blocked, and 1 invalid/failed.
 
-SAM3 is more reliable with a short visible noun phrase than a long description
-containing many exclusions. For example, `a cardboard tube` succeeded on the
-sample where a long exclusion-heavy prompt returned zero candidates.
+## Fallback policy
 
-`--rewrite-prompt` applies deterministic domain mappings such as “platform
-trolley” → “flatbed cart with handle and wheels”. It does not call an LLM.
+Without a key or SDK, rule-based prompt normalization, Physics Author, and deterministic Critic take over. A result may be delivered as `degraded` only when visual structural checks pass and both material and collision have specialized non-generic profiles. Unknown/generic semantics, explicit visual rejection, exhausted attempts, Critic errors, or failed static inspection produce `blocked`.
 
-## Optional Claude critic
-
-```bash
-python -m pip install -e '.[llm]'
-export ANTHROPIC_API_KEY='set-in-shell-only'
-export ANTHROPIC_MODEL='a-model-available-to-your-account'
-
-python scripts/run_pipeline.py \
-  --image assets/samples/paper_tube_rgb.png \
-  --prompt "a cardboard tube" \
-  --asset-category open_container \
-  --use-llm-critic
-```
-
-The optional critic uses dependency injection and lazy SDK import. Missing
-credentials, import errors, network/API failures, timeouts, and malformed JSON
-all fall back to `PhysicsCriticAgent`. Fallback summaries contain
-`[fallback: <ExceptionType>]` for auditability. A successful LLM review writes
-`policy: claude_physics_critic_v1` in `physics_review_*.json`.
+Material density and contact parameters are engineering priors with assumptions, not measurements.
 
 ## Batch assets
-
-Manifest format:
 
 ```json
 [
@@ -123,73 +97,43 @@ Manifest format:
     "prompt": "a cardboard tube",
     "asset_category": "open_container",
     "target_task": "",
-    "robot_constraints": "",
-    "rewrite_prompt": false
+    "robot_constraints": ""
   }
 ]
 ```
 
-Run:
-
 ```bash
-python scripts/batch_pipeline.py \
-  --manifest assets/samples/batch_manifest.json \
-  --continue-on-error
+python scripts/batch_pipeline.py --manifest assets/samples/batch_manifest.json --continue-on-error
 ```
 
-Each item runs in a fresh subprocess through `run_pipeline.py`. The batch
-wrapper writes a summary containing status, exit code, asset ID, final path,
-and a bounded stderr tail. Without `--continue-on-error`, processing stops at
-the first blocked or failed item.
+Each entry invokes the same `run_pipeline.py` source of truth in a fresh subprocess.
 
 ## Bundle layout
 
 ```text
-outputs/<timestamp>-<slug>-<shortid>/
+outputs/<asset-id>/
 ├── manifest.json
 ├── request.json
-├── input/source.<ext>
+├── input/
+├── agent/{asset_brief.json,trace.jsonl,decisions/}
 ├── visual/
-│   ├── sam3/{mask.npz,meta.json,preview.png}
-│   ├── sam3d/{mug.glb,mug.obj,mug.ply,preview.png}
-│   ├── sam3_report.json
-│   └── geometry_report.json
+│   ├── sam3_attempts/
+│   ├── sam3d_attempts/
+│   ├── selected.json
+│   └── visual_review.json
 ├── physics/
-│   ├── physics_proposal.json
 │   ├── physics_spec.yaml
-│   ├── physics_review_001.json
+│   ├── author/
+│   ├── critic/
 │   ├── visual.usd
 │   ├── physics.usd
 │   ├── simulation_ready.usd
-│   ├── material_report.json
 │   └── inspection.json
 └── final/{asset.usd,asset_report.json}
 ```
 
-All manifest artifact paths are relative to the bundle.
+All manifest paths are bundle-relative. The final report records controller, model/calls, fallback, selected mask/seed, repair trace, Physics Author/Critic results, assumptions, static inspection, and the Loop 2 boundary.
 
-## Current validation record
+## Validation boundary
 
-The licensed samples under `assets/samples/` were run on Ubuntu 22.04 with two
-RTX 4090 GPUs and Isaac Sim 5.1:
-
-- Rod/wire sample: completed with `convexDecomposition`.
-- Open cardboard tube: completed with `sdf`, preserving the opening.
-
-Exact meshes are model/driver dependent. The invariant result is a complete
-bundle whose static inspection reports mesh, collision, rigid body, and mass
-API checks as passing.
-
-## Failure diagnosis
-
-1. Run `python scripts/doctor.py --json`.
-2. Read `manifest.json` status/events.
-3. Inspect the corresponding `visual/logs/` or `physics/logs/` file.
-4. For blocked physics review, inspect every `physics_review_*.json`.
-5. Shorten the prompt if SAM3 returns zero candidates.
-
-## Boundary
-
-The CLI performs static asset QA. It does not yet run drop, push, containment,
-grasp, or task-success simulation. Those tests belong to Loop 2 and must be
-completed before describing an asset as task-certified.
+`complete` means the asset passed semantic/static Loop 1 checks. It has not passed dynamic drop, containment, push, grasp, articulation, or task-success tests. Those belong to Loop 2.

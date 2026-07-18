@@ -1,0 +1,9 @@
+name: aluminum
+density_kg_m3: 2700
+static_friction: 0.5
+dynamic_friction: 0.4
+restitution: 0.1
+friction_combine_mode: average
+restitution_combine_mode: max
+applicable_categories: [frame, cart, trolley, lightweight_metal_part]
+source: Engineering prior for aluminum; not a measurement.

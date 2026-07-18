@@ -1,0 +1,4 @@
+interface:
+  display_name: "Generate Mining Asset"
+  short_description: "Turn RGB images into reviewed simulation-ready USD assets"
+  default_prompt: "Use $generate-mining-asset to turn an RGB image and rough prompt into a static-physics-ready USD asset."

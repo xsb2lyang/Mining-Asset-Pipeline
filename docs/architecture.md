@@ -9,8 +9,10 @@ SAM repositories.
 
 ```text
 Prompt + RGB
-  → segmentation
-  → single-image reconstruction
+  → external repository Skill OR embedded Claude controller
+  → shared whitelisted AgentTools
+  → segmentation and semantic review
+  → single-image reconstruction and four-view review
   → USD conversion
   → physical authoring
   → static validation
@@ -26,6 +28,8 @@ an asset can be called task-certified or simulation-ready for a benchmark.
 |---|---|
 | `src/mining_asset_pipeline/` | Importable, reusable pipeline code |
 | `scripts/` | Thin CLI entry points that call `src/` |
+| `.agents/skills/` | Canonical repository-local Agent Skill |
+| `.claude/skills/` | Claude Code discovery link to the canonical Skill |
 | `configs/materials/` | Material priors: density, friction, restitution |
 | `configs/collision_profiles/` | Collision selection profiles by object class |
 | `assets/samples/` | Small licensed inputs and reproducibility manifests |
@@ -52,3 +56,9 @@ entry points live in `scripts/`. Historical workstation directories under
 `Benchmark/` are ignored and are not part of the public repository contract.
 A fresh clone may place Isaac Sim and checkpoints anywhere and configure their
 locations through `environments/local.env`.
+
+The security boundary is `AgentTools`: controllers can choose only validated
+actions and payloads, never arbitrary subprocess commands or stage output
+paths. The Skill control plane does not import Anthropic or read project API
+credentials. The embedded control plane reads `ANTHROPIC_API_KEY` only from
+the environment and uses the same tools and state machine.

@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageDraw
 
 
 def inspect_sam3(npz_path: Path, meta_path: Path) -> dict[str, Any]:
@@ -72,6 +72,43 @@ def select_sam3_candidate(npz_path: Path, meta_path: Path, image_path: Path, ind
     Image.fromarray((0.5 * rgb + 0.5 * overlay).astype(np.uint8)).save(npz_path.parent / "preview.png")
 
 
+def create_sam3_contact_sheet(npz_path: Path, image_path: Path, output_path: Path) -> Path:
+    """Render every mask candidate with its index for semantic Agent review."""
+    with np.load(npz_path, allow_pickle=False) as data:
+        masks = data["candidate_masks"] if "candidate_masks" in data else data["mask"][None, ...]
+        scores = np.asarray(data.get("scores", []), dtype=float)
+    rgb = np.asarray(Image.open(image_path).convert("RGB"))
+    tiles: list[Image.Image] = []
+    for index, raw_mask in enumerate(masks):
+        mask = np.asarray(raw_mask).astype(bool).squeeze()
+        if mask.shape != rgb.shape[:2]:
+            mask = np.asarray(
+                Image.fromarray(mask.astype(np.uint8) * 255).resize(
+                    (rgb.shape[1], rgb.shape[0]), Image.Resampling.NEAREST
+                )
+            ).astype(bool)
+        overlay = rgb.copy()
+        tint = np.zeros_like(rgb)
+        tint[mask] = (0, 255, 0)
+        overlay = (0.55 * overlay + 0.45 * tint).astype(np.uint8)
+        tile = Image.fromarray(overlay).resize((320, 320))
+        draw = ImageDraw.Draw(tile)
+        score = f"{scores[index]:.3f}" if index < scores.size else "n/a"
+        draw.rectangle((0, 0, 150, 28), fill=(0, 0, 0))
+        draw.text((8, 7), f"candidate {index}  {score}", fill=(255, 255, 255))
+        tiles.append(tile)
+    if not tiles:
+        raise ValueError("SAM3 produced no candidates for a contact sheet")
+    columns = min(3, len(tiles))
+    rows = (len(tiles) + columns - 1) // columns
+    sheet = Image.new("RGB", (columns * 320, rows * 320), (240, 240, 240))
+    for index, tile in enumerate(tiles):
+        sheet.paste(tile, ((index % columns) * 320, (index // columns) * 320))
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    sheet.save(output_path)
+    return output_path
+
+
 def inspect_glb(path: Path) -> dict[str, Any]:
     """Read GLB structure without requiring a renderer or trimesh dependency."""
     issues: list[str] = []
@@ -114,6 +151,24 @@ def inspect_glb(path: Path) -> dict[str, Any]:
         issues.append("empty_mesh")
     if not has_color and not document.get("materials"):
         warnings.append("no_vertex_color_or_material")
+    bounds_are_finite = True
+    position_bounds: list[list[float]] = []
+    for primitive in primitives:
+        position = primitive.get("attributes", {}).get("POSITION")
+        if isinstance(position, int) and position < len(accessors):
+            accessor = accessors[position]
+            for key in ("min", "max"):
+                values = accessor.get(key)
+                if values is not None:
+                    try:
+                        numeric = [float(value) for value in values]
+                    except (TypeError, ValueError):
+                        bounds_are_finite = False
+                    else:
+                        bounds_are_finite = bounds_are_finite and bool(np.isfinite(numeric).all())
+                        position_bounds.append(numeric)
+    if not bounds_are_finite:
+        issues.append("non_finite_bounds")
     return {
         "status": "pass" if not issues else "needs_review",
         "issues": sorted(set(issues)),
@@ -122,5 +177,8 @@ def inspect_glb(path: Path) -> dict[str, Any]:
         "vertex_count": vertex_count,
         "face_count": face_count,
         "has_vertex_color": has_color,
+        "has_material": bool(document.get("materials")),
+        "bounds_are_finite": bounds_are_finite,
+        "position_bounds": position_bounds,
         "file_size_bytes": path.stat().st_size,
     }

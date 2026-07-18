@@ -34,7 +34,7 @@ warnings.filterwarnings("ignore")
 os.environ["LIDRA_SKIP_INIT"] = "true"  # skip the auto-generated init module
 
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageDraw
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_OUTPUT_ROOT = Path(os.environ.get("PIPELINE_OUTPUT_DIR", REPO_ROOT / "outputs"))
@@ -42,7 +42,7 @@ DEFAULT_SAM3D_DIR = Path(os.environ.get("SAM3D_DIR", REPO_ROOT / "third_party" /
 
 
 def render_glb_preview(glb_path: Path, preview_path: Path) -> str | None:
-    """Render an image preview so review does not depend on browser WebGL."""
+    """Render four canonical views so review does not depend on browser WebGL."""
     if not glb_path.is_file():
         return None
     try:
@@ -56,16 +56,46 @@ def render_glb_preview(glb_path: Path, preview_path: Path) -> str | None:
         extent = float((bounds[1] - bounds[0]).max())
         if not np.isfinite(extent) or extent <= 0:
             raise ValueError("invalid GLB bounds")
-        renderer = pyrender.OffscreenRenderer(640, 640)
+        renderer = pyrender.OffscreenRenderer(360, 360)
         try:
-            scene = pyrender.Scene.from_trimesh_scene(mesh_scene, bg_color=[245, 245, 245, 255])
-            camera = pyrender.PerspectiveCamera(yfov=np.pi / 3.0)
-            pose = np.eye(4)
-            pose[:3, 3] = center + np.array([0.0, 0.0, extent * 1.8])
-            scene.add(camera, pose=pose)
-            scene.add(pyrender.DirectionalLight(color=np.ones(3), intensity=3.0), pose=pose)
-            color, _ = renderer.render(scene)
-            Image.fromarray(color).save(preview_path)
+            def camera_pose(direction, up=(0.0, 1.0, 0.0)):
+                eye = center + np.asarray(direction, dtype=float) / np.linalg.norm(direction) * extent * 2.2
+                backward = eye - center
+                backward /= np.linalg.norm(backward)
+                right = np.cross(np.asarray(up, dtype=float), backward)
+                if np.linalg.norm(right) < 1e-6:
+                    right = np.array([1.0, 0.0, 0.0])
+                right /= np.linalg.norm(right)
+                actual_up = np.cross(backward, right)
+                pose = np.eye(4)
+                pose[:3, 0] = right
+                pose[:3, 1] = actual_up
+                pose[:3, 2] = backward
+                pose[:3, 3] = eye
+                return pose
+
+            views = (
+                ("front", (0.0, 0.0, 1.0), (0.0, 1.0, 0.0)),
+                ("right", (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)),
+                ("top", (0.0, 1.0, 0.0), (0.0, 0.0, -1.0)),
+                ("isometric", (1.0, 1.0, 1.0), (0.0, 1.0, 0.0)),
+            )
+            tiles = []
+            for label, direction, up in views:
+                scene = pyrender.Scene.from_trimesh_scene(mesh_scene, bg_color=[245, 245, 245, 255])
+                pose = camera_pose(direction, up)
+                scene.add(pyrender.PerspectiveCamera(yfov=np.pi / 3.0), pose=pose)
+                scene.add(pyrender.DirectionalLight(color=np.ones(3), intensity=3.0), pose=pose)
+                color, _ = renderer.render(scene)
+                tile = Image.fromarray(color)
+                draw = ImageDraw.Draw(tile)
+                draw.rectangle((0, 0, 100, 28), fill=(0, 0, 0))
+                draw.text((8, 7), label, fill=(255, 255, 255))
+                tiles.append(tile)
+            sheet = Image.new("RGB", (720, 720), (245, 245, 245))
+            for index, tile in enumerate(tiles):
+                sheet.paste(tile, ((index % 2) * 360, (index // 2) * 360))
+            sheet.save(preview_path)
         finally:
             renderer.delete()
         print(f"[step2] wrote {preview_path}")
@@ -225,7 +255,7 @@ def main() -> int:
         except Exception as e:
             print(f"[step2] PLY->OBJ fallback failed: {e!r}")
 
-    preview_path = args.out_dir / "preview.png"
+    preview_path = args.out_dir / "views.png"
     preview = render_glb_preview(glb_path, preview_path) if glb_path else None
 
     summary = {
