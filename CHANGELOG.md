@@ -16,11 +16,16 @@ tagged release. Dates use ISO 8601.
   single-asset and batch CLIs.
 - The obsolete stdout-only `validate_asset.py`; static validation now uses
   `inspect_physics.py` exclusively.
+- Human visual-review states and interfaces (`ReviewDecision`,
+  `submit_review()`, `review_required`, and `visual_approved`).
 
 ### Changed
 
 - Moved early workstation and red-mug experiment notes into `docs/archive/` so
   current setup and CLI documentation remain the primary user path.
+- Visual checks now continue directly into Physics Author/Critic on success and
+  fail the task on deterministic mask or mesh errors. New manifests use schema
+  version 2.
 
 ## [0.1.0] - 2026-07-18
 

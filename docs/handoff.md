@@ -13,7 +13,7 @@ a future mining-robot benchmark, not the complete benchmark.
 - SAM3 mask generation with candidate checks and concrete prompt rewriting.
 - SAM 3D Objects GLB generation with bounded seed retries and preview fallback.
 - Unattended single/batch CLI workflows.
-- Per-asset manifests, isolated output directories, logs, reviews, and history.
+- Per-asset manifests, isolated output directories, logs, and inspection reports.
 - Rule-based Physics Author/Critic with maximum three revision rounds.
 - Optional Claude API critic with deterministic fallback and audit marker.
 - GLB → USD conversion with SAM3D vertex-color material preservation.
@@ -27,7 +27,7 @@ a future mining-robot benchmark, not the complete benchmark.
 RGB + prompt
 → SAM3 → automatic mask checks
 → SAM3D → automatic mesh checks
-→ automatic CLI visual approval
+→ deterministic visual quality gate
 → Physics Author/Critic
 → visual.usd → physics.usd → simulation_ready.usd
 → static inspection → final/asset.usd

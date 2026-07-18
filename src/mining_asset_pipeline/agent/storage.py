@@ -49,7 +49,7 @@ class AssetStore:
             "created_at": _now(),
         })
         manifest = {
-            "schema_version": 1,
+            "schema_version": 2,
             "asset_id": asset_id,
             "created_at": _now(),
             "updated_at": _now(),
@@ -102,19 +102,6 @@ class AssetStore:
         manifest["artifacts"][name] = self.relative(asset_id, path)
         manifest["updated_at"] = _now()
         self.write_json(self.root(asset_id) / "manifest.json", manifest)
-
-    def archive_visual(self, asset_id: str) -> None:
-        root = self.root(asset_id)
-        visual = root / "visual"
-        if not any(visual.iterdir()):
-            return
-        history = root / "history"
-        history.mkdir(exist_ok=True)
-        index = 1
-        while (history / f"visual_{index:03d}").exists():
-            index += 1
-        shutil.move(str(visual), str(history / f"visual_{index:03d}"))
-        visual.mkdir()
 
     def relative(self, asset_id: str, path: Path) -> str:
         path = path.resolve()

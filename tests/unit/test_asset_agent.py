@@ -1,4 +1,4 @@
-"""Dependency-light tests for the human-gated asset workflow."""
+"""Dependency-light tests for the unattended asset workflow."""
 from __future__ import annotations
 
 import json
@@ -16,7 +16,7 @@ from PIL import Image
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "src"))
 
-from mining_asset_pipeline.agent.models import AssetRequest, AssetStatus, ReviewDecision, ToolResult
+from mining_asset_pipeline.agent.models import AssetRequest, AssetStatus, ToolResult
 from mining_asset_pipeline.agent.inspection import inspect_sam3, select_sam3_candidate
 from mining_asset_pipeline.agent.physics_agents import PhysicsAuthorAgent, PhysicsCriticAgent
 from mining_asset_pipeline.agent.policy import RuleBasedPolicy
@@ -70,6 +70,24 @@ class FakeRunner:
         return ToolResult(returncode=0, command=command, log_path=str(log_path))
 
 
+class InvalidMaskRunner(FakeRunner):
+    def stream(self, name, command, cwd, log_path, env=None):
+        result = super().stream(name, command, cwd, log_path, env)
+        if name == "sam3":
+            out = Path(command[command.index("--out-dir") + 1])
+            mask = np.zeros((10, 10), dtype=np.uint8)
+            np.savez(
+                out / "mask.npz",
+                mask=mask,
+                candidate_masks=mask[None, ...],
+                boxes=np.array([[0, 0, 1, 1]]),
+                scores=np.array([0.99]),
+                best_index=0,
+                selected_index=0,
+            )
+        return result
+
+
 class AssetStoreTests(unittest.TestCase):
     def test_bundle_isolated_and_transitions_are_checked(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -79,13 +97,14 @@ class AssetStoreTests(unittest.TestCase):
             store = AssetStore(root / "outputs")
             asset_id = store.create(image, AssetRequest(prompt="rock"))
             bundle = store.root(asset_id)
+            self.assertEqual(store.manifest(asset_id)["schema_version"], 2)
             self.assertEqual(set(path.name for path in bundle.iterdir()), {"input", "visual", "physics", "final", "request.json", "manifest.json"})
             with self.assertRaises(ValueError):
                 store.transition(asset_id, AssetStatus.COMPLETE, "skip")
 
 
 class WorkflowTests(unittest.TestCase):
-    def test_review_repair_then_automatic_physics_review_completes(self) -> None:
+    def test_visual_checks_then_automatic_physics_review_completes(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             temp_root = Path(temp)
             image = temp_root / "red_mug.jpg"
@@ -95,14 +114,13 @@ class WorkflowTests(unittest.TestCase):
             (isaac / "python.sh").write_text("#!/bin/sh\n", encoding="utf-8")
             workflow = AssetWorkflow(ROOT, temp_root / "outputs", runner=FakeRunner())
             asset_id = workflow.create_asset(image, AssetRequest(prompt="red ceramic mug", asset_category="cup"))
-            self.assertEqual(workflow.run_visual(asset_id)["status"], AssetStatus.REVIEW_REQUIRED.value)
-            rerun = workflow.submit_review(asset_id, ReviewDecision(approved=False, issue="shape_incorrect"))
-            self.assertEqual(rerun["status"], AssetStatus.REVIEW_REQUIRED.value)
-            self.assertTrue((workflow.store.root(asset_id) / "history" / "visual_001").is_dir())
+            visual = workflow.run_visual(asset_id)
+            self.assertEqual(visual["status"], AssetStatus.PHYSICS_REVIEW_RUNNING.value)
             with patch.dict(os.environ, {"ISAAC_SIM_PATH": str(isaac)}):
-                complete = workflow.submit_review(asset_id, ReviewDecision(approved=True))
+                complete = workflow.run_physics_pipeline(asset_id)
             self.assertEqual(complete["status"], AssetStatus.COMPLETE.value)
             self.assertTrue((workflow.store.root(asset_id) / "final" / "asset.usd").is_file())
+            self.assertFalse((workflow.store.root(asset_id) / "visual" / "review.json").exists())
             spec = (workflow.store.root(asset_id) / "physics" / "physics_spec.yaml").read_text(encoding="utf-8")
             self.assertIn("profile: ceramic", spec)
             self.assertIn("approximation: sdf", spec)
@@ -111,18 +129,23 @@ class WorkflowTests(unittest.TestCase):
             for artifact in complete["artifacts"].values():
                 self.assertFalse(Path(artifact).is_absolute())
 
-    def test_other_feedback_does_not_run_an_unsupported_repair(self) -> None:
+    def test_failed_visual_checks_stop_before_physics_review(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             image = root / "input.png"
             Image.new("RGB", (4, 4)).save(image)
-            workflow = AssetWorkflow(ROOT, root / "outputs", runner=FakeRunner())
+            workflow = AssetWorkflow(ROOT, root / "outputs", runner=InvalidMaskRunner())
             asset_id = workflow.create_asset(image, AssetRequest(prompt="object"))
-            workflow.run_visual(asset_id)
-            manifest = workflow.submit_review(asset_id, ReviewDecision(approved=False, issue="other", feedback="need a different reference"))
-            self.assertEqual(manifest["status"], AssetStatus.REVIEW_REQUIRED.value)
-            review = workflow.store.read_json(workflow.store.root(asset_id) / "visual" / "review.json")
-            self.assertEqual(review["action"], "human_input_required")
+            manifest = workflow.run_visual(asset_id)
+            self.assertEqual(manifest["status"], AssetStatus.FAILED.value)
+            self.assertIn("SAM3 automatic checks failed", manifest["error"])
+            self.assertFalse((workflow.store.root(asset_id) / "physics" / "physics_proposal.json").exists())
+
+    def test_human_review_api_and_states_are_removed(self) -> None:
+        self.assertFalse(hasattr(AssetWorkflow, "submit_review"))
+        self.assertFalse(hasattr(AssetWorkflow, "begin_physics_review"))
+        self.assertNotIn("review_required", {status.value for status in AssetStatus})
+        self.assertNotIn("visual_approved", {status.value for status in AssetStatus})
 
 
 class PolicyTests(unittest.TestCase):

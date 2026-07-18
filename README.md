@@ -16,7 +16,7 @@ and NVIDIA Isaac Sim 5.1.
 RGB + prompt
   → SAM3 text-conditioned segmentation
   → SAM 3D Objects reconstruction (GLB)
-  → deterministic visual checks + automatic CLI approval
+  → deterministic visual quality gate
   → Physics Author / Critic review (rules, optional Claude critic)
   → GLB → visual.usd → physics.usd → simulation_ready.usd
   → static physics inspection → final/asset.usd
@@ -27,7 +27,7 @@ RGB + prompt
 - Deterministic physics fallback when the optional LLM is unavailable.
 - Container-aware collision selection (`sdf`/`convexDecomposition`).
 - SAM3D vertex-color preservation through a USD Preview Surface.
-- Persistent manifests, review records, tool logs, and configuration snapshots.
+- Persistent manifests, inspection reports, tool logs, and physics-review records.
 
 ## Repository layout
 
@@ -196,7 +196,7 @@ outputs/<asset-id>/
 ├── manifest.json
 ├── request.json
 ├── input/
-├── visual/        # mask, GLB, previews, reports, review
+├── visual/        # mask, GLB, previews, deterministic reports
 ├── physics/       # specs, critic reviews, USD stages, static inspection
 └── final/
     ├── asset.usd
@@ -222,9 +222,9 @@ GitHub-hosted CI.
 ## Known limitations
 
 - Single-image reconstruction cannot recover fully occluded geometry reliably.
-- The CLI records automatic visual approval after deterministic checks. Inspect
-  `visual/sam3/preview.png`, `visual/sam3d/preview.png`, and the reports when
-  human sign-off is required.
+- Visual QA is deterministic: failed SAM3/SAM3D checks stop the pipeline, while
+  passing checks continue directly to physics review. The checks do not judge
+  every semantic or aesthetic defect.
 - Physics priors are currently limited and are not a substitute for measured
   material or inertial data.
 - Static USD checks do not prove stable contact, containment, graspability, or

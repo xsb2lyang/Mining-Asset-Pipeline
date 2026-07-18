@@ -1,9 +1,8 @@
 """Unattended CLI: drive the asset pipeline end-to-end with no human in the loop.
 
 Image + text prompt in, ``outputs/<asset_id>/final/asset.usd`` out. After the
-deterministic visual checks, the CLI records automatic visual approval and
-starts ``run_physics_pipeline`` (Physics Author/Critic multi-round review +
-USD authoring).
+deterministic visual checks pass, the CLI starts ``run_physics_pipeline``
+(Physics Author/Critic multi-round review + USD authoring).
 
 Exit codes:
   0 — pipeline reached ``complete`` and ``final/asset.usd`` exists on disk
@@ -25,7 +24,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from mining_asset_pipeline.agent.models import AssetRequest, AssetStatus, ReviewDecision  # noqa: E402
+from mining_asset_pipeline.agent.models import AssetRequest, AssetStatus  # noqa: E402
 from mining_asset_pipeline.agent.prompt_rewriter import rewrite_prompt  # noqa: E402
 from mining_asset_pipeline.agent.workflow import AssetWorkflow  # noqa: E402
 
@@ -193,7 +192,7 @@ def main(argv: list[str] | None = None) -> int:
 
     _log("physics", f"status={manifest.get('status')}, running automatic physics review", args.quiet)
     try:
-        manifest = workflow.submit_review(asset_id, ReviewDecision(approved=True))
+        manifest = workflow.run_physics_pipeline(asset_id)
     except (RuntimeError, ValueError) as exc:
         print(f"Automatic physics review or USD authoring failed: {exc}", file=sys.stderr)
         _print_failure_diagnostics(workflow, asset_id)

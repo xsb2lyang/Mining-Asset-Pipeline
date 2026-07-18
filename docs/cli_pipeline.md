@@ -9,7 +9,7 @@ interfaces. For installation, start with [setup.md](setup.md).
 create bundle
   → SAM3 segmentation and deterministic candidate checks
   → SAM3D reconstruction (up to three meaningful seed attempts)
-  → automatic visual approval in CLI mode
+  → deterministic visual quality gate
   → Physics Author writes spec
   → Physics Critic accepts or requests bounded revision (maximum 3 rounds)
   → GLB → visual.usd
@@ -18,9 +18,15 @@ create bundle
   → static inspection → final/asset.usd
 ```
 
-The CLI records automatic visual approval after the deterministic checks and
-continues directly into physics review. Review the generated preview and
-reports separately when a human sign-off is required.
+Passing visual checks continue directly into physics review. A failed mask or
+mesh check sets the task status to `failed`, records the issue in
+`manifest.json`, and exits without authoring physics or USD files.
+
+```text
+created → visual_running → physics_review_running → usd_running → complete
+                         ↘ failed                  ↘ failed
+                              physics review → blocked
+```
 
 ## Prerequisites
 
@@ -147,8 +153,7 @@ outputs/<timestamp>-<slug>-<shortid>/
 │   ├── sam3/{mask.npz,meta.json,preview.png}
 │   ├── sam3d/{mug.glb,mug.obj,mug.ply,preview.png}
 │   ├── sam3_report.json
-│   ├── geometry_report.json
-│   └── review.json
+│   └── geometry_report.json
 ├── physics/
 │   ├── physics_proposal.json
 │   ├── physics_spec.yaml
@@ -161,8 +166,7 @@ outputs/<timestamp>-<slug>-<shortid>/
 └── final/{asset.usd,asset_report.json}
 ```
 
-All manifest artifact paths are relative to the bundle. Replaced visual
-versions are archived lazily under `history/`.
+All manifest artifact paths are relative to the bundle.
 
 ## Current validation record
 

@@ -1,8 +1,4 @@
-"""Smoke tests for the unattended CLI: drive AssetWorkflow.submit_review(approved=True)
-end-to-end with FakeRunner and a placeholder python.sh. The CLI itself is exercised
-through its public workflow surface; its argparse layer is covered separately by
-running ``scripts/run_pipeline.py --help``.
-"""
+"""Smoke tests for the unattended workflow and command-line arguments."""
 from __future__ import annotations
 
 import json
@@ -19,7 +15,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from PIL import Image  # noqa: E402
 
-from mining_asset_pipeline.agent.models import AssetRequest, AssetStatus, ReviewDecision  # noqa: E402
+from mining_asset_pipeline.agent.models import AssetRequest, AssetStatus  # noqa: E402
 from mining_asset_pipeline.agent.workflow import AssetWorkflow  # noqa: E402
 from tests.unit.test_asset_agent import FakeRunner  # noqa: E402
 
@@ -41,10 +37,11 @@ class UnattendedFlowTests(unittest.TestCase):
 
             workflow = AssetWorkflow(ROOT, temp_root / "outputs", runner=FakeRunner())
             asset_id = workflow.create_asset(image, AssetRequest(prompt="red ceramic mug", asset_category="cup"))
-            workflow.run_visual(asset_id)
+            visual = workflow.run_visual(asset_id)
+            self.assertEqual(visual["status"], AssetStatus.PHYSICS_REVIEW_RUNNING.value)
 
             with patch.dict(os.environ, {"ISAAC_SIM_PATH": str(isaac)}):
-                manifest = workflow.submit_review(asset_id, ReviewDecision(approved=True))
+                manifest = workflow.run_physics_pipeline(asset_id)
 
             self.assertEqual(manifest["status"], AssetStatus.COMPLETE.value)
             final_usd = workflow.store.root(asset_id) / "final" / "asset.usd"
@@ -61,7 +58,8 @@ class UnattendedFlowTests(unittest.TestCase):
 
             workflow = AssetWorkflow(ROOT, temp_root / "outputs", runner=FakeRunner())
             asset_id = workflow.create_asset(image, AssetRequest(prompt="open cup", asset_category="open_container"))
-            workflow.run_visual(asset_id)
+            visual = workflow.run_visual(asset_id)
+            self.assertEqual(visual["status"], AssetStatus.PHYSICS_REVIEW_RUNNING.value)
 
             def stuck_initial(req, proposal, materials, collisions):
                 return {
@@ -77,7 +75,7 @@ class UnattendedFlowTests(unittest.TestCase):
             workflow.physics_author.revise = lambda spec, findings: spec  # type: ignore[assignment]
 
             with patch.dict(os.environ, {"ISAAC_SIM_PATH": str(isaac)}):
-                manifest = workflow.submit_review(asset_id, ReviewDecision(approved=True))
+                manifest = workflow.run_physics_pipeline(asset_id)
 
             self.assertEqual(manifest["status"], AssetStatus.BLOCKED.value)
             final_usd = workflow.store.root(asset_id) / "final" / "asset.usd"

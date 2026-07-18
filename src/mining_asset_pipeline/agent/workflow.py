@@ -1,18 +1,15 @@
 """Durable orchestration for Loop 1 visual generation and USD handoff."""
 from __future__ import annotations
 
-import json
 import os
 import shutil
 from pathlib import Path
 from typing import Any
 
-import numpy as np
 import yaml
-from PIL import Image
 
 from .inspection import inspect_glb, inspect_sam3, select_sam3_candidate
-from .models import AssetRequest, AssetStatus, ReviewDecision
+from .models import AssetRequest, AssetStatus
 from .physics_agents import PhysicsAuthorAgent, PhysicsCriticAgent
 from .policy import RuleBasedPolicy
 from .runner import SubprocessToolRunner, ToolRunner, isaac_clean_environment
@@ -41,25 +38,20 @@ class AssetWorkflow:
     def create_asset(self, source_image: Path, request: AssetRequest) -> str:
         return self.store.create(source_image, request)
 
-    def run_visual(self, asset_id: str, revised_prompt: str = "", candidate_index: int | None = None) -> dict[str, Any]:
+    def run_visual(self, asset_id: str) -> dict[str, Any]:
         manifest = self.store.manifest(asset_id)
         current = AssetStatus(manifest["status"])
-        if current not in {AssetStatus.CREATED, AssetStatus.REVIEW_REQUIRED, AssetStatus.FAILED}:
+        if current not in {AssetStatus.CREATED, AssetStatus.FAILED}:
             raise ValueError(f"Cannot run visual workflow while status is {current.value}")
-        if current == AssetStatus.REVIEW_REQUIRED:
-            self.store.archive_visual(asset_id)
         if current == AssetStatus.FAILED:
             self.store.transition(asset_id, AssetStatus.VISUAL_RUNNING, "Retrying failed visual workflow")
         else:
             self.store.transition(asset_id, AssetStatus.VISUAL_RUNNING, "Starting visual generation")
         root = self.store.root(asset_id)
         request = AssetRequest(**self.store.read_json(root / "request.json"))
-        prompt = revised_prompt.strip() or request.prompt
         source = root / manifest["source_image"]
         sam3_dir = root / "visual" / "sam3"
-        sam3_command = ["conda", "run", "-n", self.sam3_env, "python", "scripts/run_sam3.py", "--image", str(source), "--prompt", prompt, "--out-dir", str(sam3_dir)]
-        if candidate_index is not None:
-            sam3_command += ["--candidate-index", str(candidate_index)]
+        sam3_command = ["conda", "run", "-n", self.sam3_env, "python", "scripts/run_sam3.py", "--image", str(source), "--prompt", request.prompt, "--out-dir", str(sam3_dir)]
         self._run_or_fail(asset_id, "sam3", sam3_command, root / "visual" / "logs" / "sam3.log")
         sam3_report = inspect_sam3(sam3_dir / "mask.npz", sam3_dir / "meta.json")
         alternative = sam3_report.get("recommended_candidate_index")
@@ -70,16 +62,11 @@ class AssetWorkflow:
         self.store.write_json(root / "visual" / "sam3_report.json", sam3_report)
         self.store.set_artifact(asset_id, "sam3_report", root / "visual" / "sam3_report.json")
         if sam3_report["status"] != "pass":
-            self.store.transition(asset_id, AssetStatus.REVIEW_REQUIRED, "SAM3 output requires review or revised input")
+            self.store.fail(asset_id, f"SAM3 automatic checks failed: {', '.join(sam3_report['issues'])}")
             return self.store.manifest(asset_id)
 
         sam3d_dir = root / "visual" / "sam3d"
-        previous_report = root / "history"
         seed_start = 42
-        if previous_report.is_dir():
-            previous_geometry = sorted(previous_report.glob("visual_*/geometry_report.json"))
-            if previous_geometry:
-                seed_start = int(self.store.read_json(previous_geometry[-1]).get("seed", 41)) + 1
         glb_report: dict[str, Any] | None = None
         for seed in range(seed_start, seed_start + 3):
             command = [
@@ -96,46 +83,15 @@ class AssetWorkflow:
         self.store.write_json(root / "visual" / "geometry_report.json", glb_report)
         self.store.set_artifact(asset_id, "glb", sam3d_dir / "mug.glb")
         self.store.set_artifact(asset_id, "geometry_report", root / "visual" / "geometry_report.json")
-        self.store.transition(asset_id, AssetStatus.REVIEW_REQUIRED, "Visual assets are ready for approval")
-        return self.store.manifest(asset_id)
-
-    def submit_review(self, asset_id: str, decision: ReviewDecision) -> dict[str, Any]:
-        if AssetStatus(self.store.manifest(asset_id)["status"]) != AssetStatus.REVIEW_REQUIRED:
-            raise ValueError("Visual review is not currently required")
-        root = self.store.root(asset_id)
-        action = self.policy.repair_action(decision)
-        payload = decision.to_dict() | {
-            "action": "begin_physics_review" if decision.approved else action.action,
-            "explanation": "Visual asset approved." if decision.approved else action.explanation,
-        }
-        self.store.write_json(root / "visual" / "review.json", payload)
-        self.store.set_artifact(asset_id, "review", root / "visual" / "review.json")
-        if not decision.approved:
-            action = self.policy.repair_action(decision)
-            if action.action == "human_input_required":
-                return self.store.manifest(asset_id)
-            return self.run_visual(asset_id, decision.revised_prompt, decision.candidate_index)
-        self.begin_physics_review(asset_id, record_approval=False)
-        return self.run_physics_pipeline(asset_id)
-
-    def begin_physics_review(self, asset_id: str, *, record_approval: bool = True) -> dict[str, Any]:
-        """Move a visually approved asset into the automatic physics-review stage."""
-        if AssetStatus(self.store.manifest(asset_id)["status"]) != AssetStatus.REVIEW_REQUIRED:
-            raise ValueError("Visual review is not currently required")
-        self.store.transition(asset_id, AssetStatus.VISUAL_APPROVED, "Visual asset approved")
-        root = self.store.root(asset_id)
-        if record_approval:
-            decision = ReviewDecision(approved=True)
-            payload = decision.to_dict() | {"action": "begin_physics_review", "explanation": "Visual asset approved."}
-            self.store.write_json(root / "visual" / "review.json", payload)
-            self.store.set_artifact(asset_id, "review", root / "visual" / "review.json")
-        request = AssetRequest(**self.store.read_json(root / "request.json"))
+        if glb_report["status"] != "pass":
+            self.store.fail(asset_id, f"SAM3D automatic checks failed: {', '.join(glb_report['issues'])}")
+            return self.store.manifest(asset_id)
         proposal = self.policy.physics_proposal(request)
         proposal["available_material_profiles"] = sorted(self._material_profiles())
         proposal["available_collision_profiles"] = sorted(self._collision_profiles())
         self.store.write_json(root / "physics" / "physics_proposal.json", proposal)
         self.store.set_artifact(asset_id, "physics_proposal", root / "physics" / "physics_proposal.json")
-        self.store.transition(asset_id, AssetStatus.PHYSICS_REVIEW_RUNNING, "Physics Author/Critic automatic review started")
+        self.store.transition(asset_id, AssetStatus.PHYSICS_REVIEW_RUNNING, "Visual checks passed; Physics Author/Critic review started")
         return self.store.manifest(asset_id)
 
     def run_physics_pipeline(self, asset_id: str) -> dict[str, Any]:
