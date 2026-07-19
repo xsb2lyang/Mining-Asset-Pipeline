@@ -97,6 +97,8 @@ scene_outputs/<scene_name>/
 Deliver the complete `final/` directory, not the root USD alone. The root USD
 uses relative references into `final/assets/`, so the directory can be copied
 to another computer without retaining paths from the generating workstation.
+All three authored stages use `1.0 metersPerUnit`; the static report fails if
+the assembled stage or either packaged dependency is not metric.
 
 ## Run Phase 1
 

@@ -115,6 +115,12 @@ def main() -> int:
         stage = Usd.Stage.Open(str(out_usd))
         if stage is None:
             raise RuntimeError(f"Unable to reopen assembled USD: {out_usd}")
+        # Both packaged inputs are authored in meters.  The WorldComposer
+        # helper creates a new root stage without linear-unit metadata, which
+        # OpenUSD interprets as centimetres (0.01 m/unit).  Author metres on
+        # the assembled root to preserve the source scene's physical scale.
+        UsdGeom.SetStageMetersPerUnit(stage, 1.0)
+        stage.GetRootLayer().Save()
         root_layer = stage.GetRootLayer()
         replacements = {
             str(packaged_gaussian): packaged_gaussian.relative_to(out_usd.parent).as_posix(),
@@ -140,7 +146,19 @@ def main() -> int:
         absolute_paths = [path for path in external_paths if os.path.isabs(path)]
         gauss_prim = stage.GetPrimAtPath("/World/gauss")
         mesh_prim = stage.GetPrimAtPath("/World/Xform")
+        component_units = {
+            "gaussian_usdz": UsdGeom.GetStageMetersPerUnit(
+                Usd.Stage.Open(str(packaged_gaussian))
+            ),
+            "mesh_usd": UsdGeom.GetStageMetersPerUnit(
+                Usd.Stage.Open(str(packaged_mesh))
+            ),
+        }
         checks = {
+            "meters_per_unit_is_meter": abs(UsdGeom.GetStageMetersPerUnit(stage) - 1.0) < 1e-9,
+            "component_units_are_meters": all(
+                abs(units - 1.0) < 1e-9 for units in component_units.values()
+            ),
             "default_prim_is_world": str(stage.GetDefaultPrim().GetPath()) == "/World",
             "gaussian_prim_exists": gauss_prim.IsValid(),
             "collider_prim_exists": mesh_prim.IsValid(),
@@ -164,6 +182,8 @@ def main() -> int:
             "passed": all(checks.values()),
             "stage": out_usd.name,
             "default_prim": str(stage.GetDefaultPrim().GetPath()),
+            "meters_per_unit": UsdGeom.GetStageMetersPerUnit(stage),
+            "component_meters_per_unit": component_units,
             "checks": checks,
             "references": external_paths,
             "absolute_references": absolute_paths,

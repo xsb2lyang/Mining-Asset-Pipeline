@@ -60,7 +60,15 @@ class ScenePhase1Tests(unittest.TestCase):
                 report = Path(command[command.index("--validation-report") + 1])
                 mesh.write_bytes(b"mesh")
                 scene.write_bytes(b"scene")
-                report.write_text(json.dumps({"passed": True}), encoding="utf-8")
+                report.write_text(
+                    json.dumps(
+                        {
+                            "passed": True,
+                            "checks": {"meters_per_unit_is_meter": True},
+                        }
+                    ),
+                    encoding="utf-8",
+                )
 
             with patch.object(phase1.shutil, "which", return_value="/usr/bin/conda"), patch.object(
                 phase1, "_run", side_effect=fake_run
