@@ -7,7 +7,7 @@ torchvision==0.20.1+cu121
 numpy==1.26.4
 usd-core==26.5
 nvidia-ncore==19.5.0
-kornia==0.8.2
+kornia==0.8.3
 zarr==2.18.7
 numcodecs==0.15.1
 universal-pathlib==0.3.10
