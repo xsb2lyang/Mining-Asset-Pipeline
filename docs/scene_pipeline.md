@@ -116,6 +116,30 @@ when replacement is intentional. On success it prints `scene_usd=...` and
 writes SHA-256 input hashes, pinned submodule revisions, parameters, artifacts,
 status and limitations to `manifest.json`.
 
+## Record a preview video
+
+Run the preview script through Isaac Sim's own Python. It creates a temporary
+camera, captures a fly-through along the collider's longest horizontal axis,
+and writes an MP4 under `final/preview/` without modifying the source scene:
+
+```bash
+"$ISAAC_SIM_PATH/python.sh" scripts/record_scene_preview.py \
+  --scene scene_outputs/example_mine_tunnel/final/example_mine_tunnel.usd
+```
+
+Use `--camera-mode orbit` for an exterior overview, `--keep-frames` to retain
+the rendered PNGs, `--show-ui` to keep the Isaac Sim window visible, and
+`--overwrite` to replace an existing preview.
+
+The current Phase 1 output uses a legacy NuRec Gaussian payload. Isaac Sim 5.1
+can compose and statically validate that payload, but its headless viewport
+capture is not reliable for NuRec rendering. The preview script therefore uses
+`--visual-mode auto` by default: it detects NuRec and records the visible
+collider geometry instead. This provides a dependable geometry/camera preview,
+not a color-faithful Gaussian rendering. Use `--visual-mode full` only on a
+runtime known to render NuRec successfully; no source USD is modified in either
+mode.
+
 ## Marble API boundary
 
 Marble generation is an optional upstream acquisition stage, not a dependency

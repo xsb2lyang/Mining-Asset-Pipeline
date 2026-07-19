@@ -40,6 +40,7 @@ class RepositoryLayoutTests(unittest.TestCase):
             "scripts/launch_isaac_sim.sh",
             "scripts/setup_scene_phase1_env.sh",
             "scripts/run_scene_phase1.py",
+            "scripts/record_scene_preview.py",
             "scripts/generate_marble_world.py",
             "scripts/doctor.py",
             "scripts/asset_tool.py",

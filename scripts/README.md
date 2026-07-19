@@ -19,6 +19,7 @@ with Isaac Sim's `python.sh`, not the current conda Python.
 | `generate_marble_world.py` | Optional Marble API acquisition: RGB → PLY + collider GLB |
 | `run_scene_phase1.py` | Marble PLY + collider GLB → portable WorldComposer Phase 1 scene package |
 | `scene_phase1_isaac.py` | Internal Isaac Sim helper used by `run_scene_phase1.py` |
+| `record_scene_preview.py` | Render an automatic fly-through or orbit MP4 for a Phase 1 scene |
 
 Example:
 
