@@ -3,7 +3,7 @@
 # these constraints prevent known zarr/numcodecs and PyTorch drift.
 setuptools==78.1.1
 torch==2.5.1+cu121
-torchvision==0.20.1+cu121
+torchvision==0.28.0
 numpy==1.26.4
 usd-core==26.5
 nvidia-ncore==19.5.0
