@@ -28,6 +28,6 @@ conda run -n "${ENV_NAME}" python -m pip install \
   "${ROOT}/third_party/3dgrut"
 
 PYTHONPATH="${ROOT}/third_party/3dgrut" conda run -n "${ENV_NAME}" \
-  python -m threedgrut.export.scripts.transcode --help >/dev/null
+  python "${ROOT}/scripts/transcode_marble_ply_to_nurec.py" --help >/dev/null
 
 echo "Scene Phase 1 environment is ready: ${ENV_NAME}"

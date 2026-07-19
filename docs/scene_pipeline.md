@@ -8,8 +8,8 @@ USD scene package for Isaac Sim.
 
 ```text
 Marble world generation/export (optional Phase 0)
-  → textured mesh GLB + collider GLB (+ pano PNG / optional PLY provenance)
-  → material-preserving visual GLB-to-USD conversion
+  → textured mesh GLB + collider GLB (+ pano PNG / optional PLY)
+  → material-preserving visual GLB-to-USD conversion, or PLY → fixed-SH NuRec compatibility conversion
   → separate visible visual layer and invisible kinematic collision layer
   → relative-reference packaging
   → static USD validation
@@ -24,20 +24,28 @@ validation.
 ## Runtime boundary
 
 `third_party/3dgrut` and `third_party/WorldComposer` remain pinned upstream
-submodules for historical experiments and future extensions. The renderable
-Phase 1 path does not use legacy NuRec: Isaac Sim 5.1 does not render that
-payload reliably. It converts Marble's high-quality textured mesh directly.
+submodules. The preferred path uses Marble's high-quality textured mesh
+directly. When Marble only supplies a Gaussian PLY, Phase 1 uses a pinned
+NuRec compatibility adapter: Marble PLYs often contain DC colour only, while
+the Isaac Sim 5.1 NuRec renderer requires a fixed degree-3 SH tensor. The
+adapter pads only the missing higher-order coefficients with zeros; geometry,
+opacity, DC colour, scale and rotation remain byte-equivalent after float16
+packing. This is the same layout as the historical working Real2Sim export.
 
 Runtime isolation is intentional:
 
 | Runtime | Responsibility |
 |---|---|
 | Main Python 3.11 environment | Marble acquisition, orchestration, manifests and logs |
+| Conda `worldcomposer-r2s` | PLY → fixed-SH NuRec compatibility conversion |
 | Isaac Sim 5.1 `python.sh` | Material-preserving GLB conversion, OpenUSD composition and validation |
 
 The entry point clears Conda/CUDA Python environment variables before starting
-Kit. A separate 3dgrut Conda environment is no longer required for the
-renderable Phase 1 path.
+Kit. Set up the isolated transcoder once when a PLY-only scene is expected:
+
+```bash
+scripts/setup_scene_phase1_env.sh
+```
 
 ## Installation
 
@@ -64,13 +72,13 @@ Large inputs and generated scenes are intentionally ignored by Git:
 local_data/scene_inputs/<scene_name>/
 ├── textured_mesh.glb       # required visible scene mesh
 ├── collider.glb            # required physics mesh
-└── scene.ply               # optional Marble provenance
+└── scene.ply               # PLY-only visual input, or provenance when a textured mesh exists
 
 scene_outputs/<scene_name>/
 ├── manifest.json
-├── input/                  # normalized visual and collider GLBs
-├── intermediate/           # converted visual and collider USD files
-├── logs/                   # full 3dgrut and Isaac Sim logs
+├── input/                  # normalized visual input (GLB or PLY) and collider GLB
+├── intermediate/           # converted visual/collider USD and optional fixed-SH NuRec USDZ
+├── logs/                   # full 3dgrut compatibility-transcode and Isaac Sim logs
 └── final/
     ├── <scene_name>.usd
     ├── static_validation.json
@@ -97,6 +105,23 @@ python scripts/run_scene_phase1.py \
   --scene-name "example mine tunnel"
 ```
 
+If Marble did not provide `textured_mesh.glb`, provide its PLY instead. The
+orchestrator stages the PLY, runs the isolated compatibility transcoder, then
+packages the generated USDZ below `final/assets/visual/` using only relative
+references:
+
+```bash
+python scripts/run_scene_phase1.py \
+  --ply local_data/scene_inputs/example/scene.ply \
+  --collider-glb local_data/scene_inputs/example/collider.glb \
+  --scene-name "example mine tunnel"
+```
+
+Use `--threedgrut-env <name>` only when the isolated environment has a name
+other than `worldcomposer-r2s`. Do not invoke 3dgrut's generic `transcode`
+command for a DC-only Marble PLY: it writes an empty high-order SH tensor that
+can appear black in Isaac Sim 5.1.
+
 The command refuses to replace an existing scene bundle. Use `--force` only
 when replacement is intentional. On success it prints `scene_usd=...` and
 writes SHA-256 input hashes, pinned submodule revisions, parameters, artifacts,
@@ -118,12 +143,13 @@ the rendered PNGs, `--show-ui` to keep the Isaac Sim window visible, and
 `--overwrite` to replace an existing preview.
 
 The preferred Phase 1 output has a visible textured-mesh layer, so its default
-preview is color-faithful. If Marble's separate high-quality mesh export is
-unavailable, pass the downloaded `pano.png` instead: the pipeline creates a
-visible, pano-projected collider mesh and records `quality: degraded` in the
-manifest. This fallback is renderable and collision-aligned but has unavoidable
-single-panorama texture distortion. `--visual-mode auto` still recognizes
-historical NuRec bundles and falls back to their collider for compatibility.
+preview is color-faithful. The PLY compatibility path is also visible in Isaac
+Sim, but can only reproduce the colour and geometry information that Marble
+put in the PLY; a high-quality textured mesh remains preferable. If neither is
+available, pass the downloaded `pano.png`: the pipeline creates a visible,
+pano-projected collider mesh and records `quality: degraded` in the manifest.
+This final fallback is renderable and collision-aligned but has unavoidable
+single-panorama texture distortion.
 
 ## Marble API boundary
 

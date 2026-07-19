@@ -2,10 +2,9 @@
 """Author the Isaac Sim half of a renderable Marble Phase 1 scene.
 
 Run with Isaac Sim's ``python.sh``.  The script deliberately creates separate
-visual and collision prims: a material-preserving textured GLB for rendering,
-or a standard colored-point fallback from Marble's PLY, and a geometry-only
-GLB for kinematic physics. This is portable across Isaac Sim 5.1 installations
-and avoids the legacy NuRec visual dependency.
+visual and collision prims: a material-preserving textured GLB, a
+compatibility-authored NuRec Gaussian payload, or a standard colored-point
+fallback for rendering; plus a geometry-only GLB for kinematic physics.
 """
 
 from __future__ import annotations
@@ -25,6 +24,11 @@ def parse_args() -> argparse.Namespace:
     )
     visual_group = parser.add_mutually_exclusive_group(required=True)
     visual_group.add_argument("--visual-glb", type=Path)
+    visual_group.add_argument(
+        "--nurec-usdz",
+        type=Path,
+        help="Fixed-SH Marble NuRec payload authored by transcode_marble_ply_to_nurec.py",
+    )
     visual_group.add_argument("--ply", type=Path, help="Marble Gaussian-splat PLY fallback")
     visual_group.add_argument("--pano", type=Path, help="Marble panorama PNG textured-collider fallback")
     parser.add_argument("--collider-glb", type=Path, required=True)
@@ -99,7 +103,12 @@ def _has_renderable_geometry(prim) -> bool:
     from pxr import UsdGeom
 
     return any(
-        child.IsA(UsdGeom.Mesh) or child.IsA(UsdGeom.Points)
+        child.IsA(UsdGeom.Mesh)
+        or child.IsA(UsdGeom.Points)
+        or (
+            child.GetTypeName() == "Volume"
+            and child.GetAttribute("omni:nurec:isNuRecVolume").Get() is True
+        )
         for child in prim.GetStage().Traverse()
         if child.GetPath().HasPrefix(prim.GetPath())
     )
@@ -176,6 +185,22 @@ def _convert_gaussian_ply_to_points_usd(ply: Path, output: Path, max_point_count
     cloud.CreateDisplayOpacityPrimvar(UsdGeom.Tokens.vertex).Set(Vt.FloatArray.FromNumpy(opacity))
     stage.Save()
     return len(points)
+
+
+def _write_nurec_visual_wrapper(nurec_usdz: Path, output: Path) -> None:
+    """Reference a packaged NuRec USDZ through a metric visual component USD."""
+    from pxr import Usd, UsdGeom
+
+    output.parent.mkdir(parents=True, exist_ok=True)
+    if output.exists():
+        output.unlink()
+    stage = Usd.Stage.CreateNew(str(output))
+    UsdGeom.SetStageUpAxis(stage, UsdGeom.Tokens.z)
+    UsdGeom.SetStageMetersPerUnit(stage, 1.0)
+    root = UsdGeom.Xform.Define(stage, "/NuRecVisual")
+    stage.SetDefaultPrim(root.GetPrim())
+    root.GetPrim().GetReferences().AddReference(nurec_usdz.name)
+    stage.Save()
 
 
 def _convert_collider_to_pano_visual_usd(
@@ -291,6 +316,7 @@ def _write_scene(
 def main() -> int:
     args = parse_args()
     visual_glb = require_file(args.visual_glb, "Visual GLB") if args.visual_glb else None
+    nurec_usdz = require_file(args.nurec_usdz, "NuRec USDZ") if args.nurec_usdz else None
     ply = require_file(args.ply, "Marble PLY") if args.ply else None
     pano = require_file(args.pano, "Marble panorama") if args.pano else None
     collider_glb = require_file(args.collider_glb, "Collider GLB")
@@ -324,6 +350,14 @@ def main() -> int:
                     )
                 )
                 visual_representation = "textured_mesh"
+                visual_point_count = None
+            elif nurec_usdz:
+                print(f"[phase1] packaging fixed-SH NuRec visual: {nurec_usdz}", flush=True)
+                packaged_nurec = visual_usd.parent / nurec_usdz.name
+                if nurec_usdz != packaged_nurec:
+                    shutil.copy2(nurec_usdz, packaged_nurec)
+                _write_nurec_visual_wrapper(packaged_nurec, visual_usd)
+                visual_representation = "nurec_fixed_sh_compatibility"
                 visual_point_count = None
             elif pano:
                 print(f"[phase1] projecting Marble pano onto collider fallback: {pano}", flush=True)

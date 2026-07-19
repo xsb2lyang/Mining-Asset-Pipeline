@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Build a portable, renderable Marble Phase 1 scene package for Isaac Sim.
 
-The visual mesh and the physics collider are authored as distinct USD layers:
-the textured mesh is visible, while the collider is invisible and kinematic.
-This deliberately avoids legacy NuRec payloads, which do not render reliably
-in the repository's Isaac Sim 5.1 target.
+The visual scene and its kinematic physics collider are authored as distinct
+USD layers.  Marble PLY files are converted through a fixed-SH NuRec
+compatibility adapter so the Isaac Sim 5.1 renderer does not receive the empty
+higher-order SH tensor emitted by the generic current 3dgrut transcoder.
 """
 
 from __future__ import annotations
@@ -109,8 +109,8 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--ply",
         type=Path,
         help=(
-            "Marble Gaussian-splat PLY. Used as a colored standard-USD point-cloud visual fallback "
-            "when --visual-glb is unavailable; otherwise retained as provenance."
+            "Marble Gaussian-splat PLY. When --visual-glb is unavailable, this is converted to a "
+            "fixed-SH NuRec compatibility visual; otherwise retained as provenance."
         ),
     )
     parser.add_argument(
@@ -131,6 +131,11 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--scene-scale", type=float, default=1.0)
     parser.add_argument("--converter-timeout", type=float, default=300.0)
+    parser.add_argument(
+        "--threedgrut-env",
+        default=os.environ.get("THREEDGRUT_ENV", "worldcomposer-r2s"),
+        help="Conda environment for the isolated Marble PLY -> NuRec compatibility transcoder",
+    )
     parser.add_argument("--force", action="store_true", help="Replace an existing scene bundle")
     return parser.parse_args(argv)
 
@@ -179,14 +184,18 @@ def main(argv: list[str] | None = None) -> int:
         directory.mkdir(parents=True, exist_ok=True)
 
     staged_visual_glb = staged_input / f"{scene_slug}_visual.glb" if visual_glb else None
+    staged_ply = staged_input / f"{scene_slug}.ply" if ply else None
     staged_collider_glb = staged_input / f"{scene_slug}_collider.glb"
     if visual_glb and staged_visual_glb:
         shutil.copy2(visual_glb, staged_visual_glb)
+    if ply and staged_ply:
+        shutil.copy2(ply, staged_ply)
     shutil.copy2(collider_glb, staged_collider_glb)
     visual_usd = intermediate / "visual" / f"{scene_slug}_visual.usd"
     collider_usd = intermediate / "collider" / f"{scene_slug}_collider.usd"
     scene_usd = final / f"{scene_slug}.usd"
     validation_report = final / "static_validation.json"
+    nurec_usdz = intermediate / "visual" / f"{scene_slug}.usdz"
     manifest_path = bundle / "manifest.json"
     manifest: dict[str, Any] = {
         "schema_version": 1,
@@ -205,6 +214,8 @@ def main(argv: list[str] | None = None) -> int:
             "visual_format": (
                 "textured_mesh_glb"
                 if visual_glb
+                else "nurec_fixed_sh_compatibility"
+                if ply
                 else "pano_textured_collider_fallback"
                 if pano
                 else "colored_point_cloud_fallback"
@@ -234,6 +245,20 @@ def main(argv: list[str] | None = None) -> int:
         isaac_env = os.environ.copy()
         for name in CLEAR_FOR_ISAAC:
             isaac_env.pop(name, None)
+        if ply and not visual_glb:
+            if not shutil.which("conda"):
+                raise RuntimeError("conda is required for PLY -> NuRec conversion; run scripts/setup_scene_phase1_env.sh")
+            nurec_command = [
+                "conda", "run", "-n", args.threedgrut_env,
+                "python", str(ROOT / "scripts" / "transcode_marble_ply_to_nurec.py"),
+                "--ply", str(staged_ply), "--output", str(nurec_usdz),
+            ]
+            nurec_env = os.environ.copy()
+            nurec_env["PYTHONPATH"] = str(ROOT / "third_party" / "3dgrut")
+            _run(nurec_command, env=nurec_env, log_path=logs / "nurec_transcode.log")
+            if not nurec_usdz.is_file():
+                raise RuntimeError(f"NuRec compatibility transcoder did not create: {nurec_usdz}")
+
         command = [
             str(isaac_python),
             str(ROOT / "scripts" / "scene_phase1_isaac.py"),
@@ -247,6 +272,8 @@ def main(argv: list[str] | None = None) -> int:
         ]
         if staged_visual_glb:
             command.extend(["--visual-glb", str(staged_visual_glb)])
+        elif ply:
+            command.extend(["--nurec-usdz", str(nurec_usdz)])
         elif pano:
             command.extend(["--pano", str(pano)])
         else:
@@ -267,6 +294,9 @@ def main(argv: list[str] | None = None) -> int:
         }
         if staged_visual_glb:
             manifest["artifacts"]["staged_visual_glb"] = str(staged_visual_glb.relative_to(bundle))
+        elif ply:
+            manifest["artifacts"]["staged_ply"] = str(staged_ply.relative_to(bundle))
+            manifest["artifacts"]["nurec_usdz"] = str(nurec_usdz.relative_to(bundle))
         else:
             manifest["quality"] = "degraded"
             manifest["limitations"].append(

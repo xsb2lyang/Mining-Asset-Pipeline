@@ -16,6 +16,7 @@ with Isaac Sim's `python.sh`, not the current conda Python.
 | `batch_pipeline.py` | Batch wrapper: JSON manifest → one independent USD asset per entry + summary JSON |
 | `doctor.py` | Check local packages, Conda environments, checkpoints, GPU tools, and Isaac Sim |
 | `setup_scene_phase1_env.sh` | Create the isolated, constrained 3dgrut transcoder environment |
+| `transcode_marble_ply_to_nurec.py` | Restore the fixed-SH NuRec layout required by Marble PLYs without higher-order SH coefficients |
 | `generate_marble_world.py` | Optional Marble API acquisition: RGB image or orbit video → textured mesh + collider GLBs |
 | `run_scene_phase1.py` | Marble textured mesh + collider GLBs → renderable Phase 1 scene package |
 | `scene_phase1_isaac.py` | Internal Isaac Sim visual/collider assembly helper |

@@ -18,6 +18,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 import run_scene_phase1 as phase1  # noqa: E402
 import generate_marble_world as marble  # noqa: E402
+import transcode_marble_ply_to_nurec as nurec_compat  # noqa: E402
 
 
 class ScenePhase1Tests(unittest.TestCase):
@@ -190,6 +191,11 @@ class ScenePhase1Tests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "must be a .ply"):
                 phase1._require_input(path, ".ply", "PLY")
 
+    def test_nurec_compatibility_layout_is_fixed_degree_three(self) -> None:
+        self.assertEqual(nurec_compat._expected_specular_width(3), 45)
+        with self.assertRaisesRegex(ValueError, "non-negative"):
+            nurec_compat._expected_specular_width(-1)
+
     def test_main_builds_renderable_scene_commands(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -277,6 +283,59 @@ class ScenePhase1Tests(unittest.TestCase):
                     ]
                 )
             self.assertEqual(result, 2)
+
+    def test_ply_only_scene_uses_fixed_sh_nurec_compatibility_transcoder(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            ply = root / "scene.ply"
+            collider = root / "collider.glb"
+            isaac = root / "isaac"
+            output = root / "outputs"
+            ply.write_bytes(b"ply")
+            collider.write_bytes(b"collider")
+            isaac.mkdir()
+            (isaac / "python.sh").write_text("#!/bin/sh\n", encoding="utf-8")
+            commands: list[list[str]] = []
+
+            def fake_run(command, *, env, log_path):
+                del env
+                command = list(command)
+                commands.append(command)
+                log_path.parent.mkdir(parents=True, exist_ok=True)
+                log_path.write_text("ok\n", encoding="utf-8")
+                if any(item.endswith("transcode_marble_ply_to_nurec.py") for item in command):
+                    Path(command[command.index("--output") + 1]).parent.mkdir(parents=True, exist_ok=True)
+                    Path(command[command.index("--output") + 1]).write_bytes(b"usdz")
+                    return
+                Path(command[command.index("--visual-usd") + 1]).parent.mkdir(parents=True, exist_ok=True)
+                Path(command[command.index("--visual-usd") + 1]).write_bytes(b"visual")
+                Path(command[command.index("--collider-usd") + 1]).parent.mkdir(parents=True, exist_ok=True)
+                Path(command[command.index("--collider-usd") + 1]).write_bytes(b"collider")
+                Path(command[command.index("--out-usd") + 1]).write_bytes(b"scene")
+                Path(command[command.index("--validation-report") + 1]).write_text(
+                    json.dumps({"passed": True}), encoding="utf-8"
+                )
+
+            with patch.object(phase1, "_run", side_effect=fake_run), patch.object(
+                phase1.shutil, "which", return_value="/usr/bin/conda"
+            ), contextlib.redirect_stdout(io.StringIO()):
+                result = phase1.main(
+                    [
+                        "--ply", str(ply),
+                        "--collider-glb", str(collider),
+                        "--scene-name", "PLY Scene",
+                        "--output-root", str(output),
+                        "--isaac-sim-path", str(isaac),
+                    ]
+                )
+
+            self.assertEqual(result, 0)
+            self.assertEqual(len(commands), 2)
+            self.assertTrue(any(item.endswith("transcode_marble_ply_to_nurec.py") for item in commands[0]))
+            self.assertIn("--nurec-usdz", commands[1])
+            manifest = json.loads((output / "ply_scene" / "manifest.json").read_text())
+            self.assertEqual(manifest["parameters"]["visual_format"], "nurec_fixed_sh_compatibility")
+            self.assertEqual(manifest["artifacts"]["nurec_usdz"], "intermediate/visual/ply_scene.usdz")
 
     def test_pano_fallback_is_forwarded_and_marked_degraded(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
