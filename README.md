@@ -1,5 +1,7 @@
 # Mining Asset Pipeline
 
+[English](README.md) | [简体中文](README.zh-CN.md)
+
 Generate a physics-authored USD asset from one RGB image and a text prompt.
 The project combines Meta SAM3, SAM 3D Objects, a bounded asset-quality agent,
 and NVIDIA Isaac Sim 5.1. It also includes an experimental Marble/WorldComposer
@@ -10,6 +12,22 @@ path for building full-scene USD packages.
 > damping, and CCD attributes, then performs static USD checks. Dynamic
 > drop/push/grasp validation is planned for Loop 2, so “complete” currently
 > means **static-pipeline complete**, not task-certified in simulation.
+
+## Quick start: choose a path
+
+Complete the shared machine setup in [docs/setup.md](docs/setup.md) first, then
+choose the entry point that matches the input and level of automation.
+
+| Goal | Input | Recommended entry point | Additional requirement |
+|---|---|---|---|
+| Generate one simulation asset | RGB image + rough prompt | `$generate-mining-asset` in Codex/Claude Code | SAM3, SAM3D, checkpoints, Isaac Sim |
+| Generate many simulation assets | JSON batch manifest | `python scripts/batch_pipeline.py --manifest ...` | Same asset prerequisites |
+| Generate a static Phase 1 scene | Orbit video or panorama | `$generate-mining-scene` in Codex/Claude Code | `.[scene]`, `worldcomposer-r2s`, Isaac Sim, `WORLDLABS_API_KEY` |
+| Run one asset unattended | RGB image + prompt | `python scripts/run_pipeline.py ...` | Optional `.[llm]` and `ANTHROPIC_API_KEY` for the embedded controller |
+
+Repository Skills use the reasoning capability of the current Codex/Claude Code
+session; they do not read a project-level Anthropic key. The scene path is
+static Phase 1 only. It does not validate robot dynamics, navigation, or tasks.
 
 ## What is implemented
 
@@ -183,12 +201,45 @@ python scripts/batch_pipeline.py \
   --continue-on-error
 ```
 
-### Repository Skill (no project API call)
+### Repository Skill: generate one asset (no project API call)
 
 Open the repository in Codex or Claude Code and invoke
-`generate-mining-asset` with the image path and rough prompt. The canonical
-Skill lives in `.agents/skills/generate-mining-asset`; its controlled tools do
-not import Anthropic or read `ANTHROPIC_API_KEY`.
+`generate-mining-asset` with the image path and rough prompt:
+
+```text
+Use $generate-mining-asset with RGB /absolute/path/object.png
+and rough prompt "a rusty mining drill rod"
+```
+
+The canonical Skill lives in `.agents/skills/generate-mining-asset`; its
+controlled tools do not import Anthropic or read `ANTHROPIC_API_KEY`.
+
+### Repository Skill: generate one Phase 1 scene
+
+Install the scene-only dependencies and set the World Labs credential in the
+shell that launches the Agent. Never place that credential in a repository
+file.
+
+```bash
+python -m pip install -e '.[scene]'
+scripts/setup_scene_phase1_env.sh
+export WORLDLABS_API_KEY='your-key-in-the-shell-only'
+```
+
+Then use one local orbit video (`.mp4`, `.mov`, `.mkv`) or one panoramic RGB
+image. The versioned capture example is
+`assets/samples/scenes/mine_tunnel_orbit.mp4`.
+
+```text
+Use $generate-mining-scene with assets/samples/scenes/mine_tunnel_orbit.mp4
+and description "a subterranean mine tunnel"
+```
+
+The Skill acquires Marble exports, assembles Phase 1, checks the static USD
+report, and renders a short preview before returning the final scene USD. It
+uses the default PLY/NuRec path; an HQ textured mesh is exported only when you
+explicitly request it. See [Marble scene → USD](docs/scene_pipeline.md) for
+cost, input-capture, output-package, and limitation details.
 
 ### Embedded Claude controller
 
@@ -226,6 +277,18 @@ outputs/<asset-id>/
 All paths stored in a manifest are relative to the asset bundle. Manifest v3
 separates status, phase, and quality. Exit codes are `0` for complete, `2` for
 blocked, and `1` for failure.
+
+Scene packages use the analogous portable layout:
+
+```text
+scene_outputs/<scene-name>/
+└── final/
+    ├── <scene-name>.usd
+    ├── static_validation.json
+    └── assets/             # relative USD dependencies
+```
+
+Copy or publish the complete `final/` directory, not the root scene USD alone.
 
 ## Tests
 

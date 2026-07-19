@@ -20,6 +20,7 @@ class RepositoryLayoutTests(unittest.TestCase):
             ".gitignore",
             ".gitmodules",
             "README.md",
+            "README.zh-CN.md",
             "CHANGELOG.md",
             "CODE_OF_CONDUCT.md",
             "CONTRIBUTING.md",
@@ -148,13 +149,14 @@ class RepositoryLayoutTests(unittest.TestCase):
             self.assertIn(required_text, policy)
 
     def test_public_docs_do_not_contain_maintainer_absolute_path(self) -> None:
-        public_files = [ROOT / "README.md", *(ROOT / "docs").rglob("*.md")]
+        public_files = [ROOT / "README.md", ROOT / "README.zh-CN.md", *(ROOT / "docs").rglob("*.md")]
         for path in public_files:
             self.assertNotIn("/home/user/Xsb_WS", path.read_text(encoding="utf-8"), str(path))
 
     def test_relative_markdown_links_resolve(self) -> None:
         markdown_files = [
             ROOT / "README.md",
+            ROOT / "README.zh-CN.md",
             ROOT / "CONTRIBUTING.md",
             ROOT / "SECURITY.md",
             ROOT / "SUPPORT.md",
