@@ -37,6 +37,7 @@ class RepositoryLayoutTests(unittest.TestCase):
             "environments/scene_phase1_constraints.txt",
             "assets/samples/README.md",
             "assets/samples/batch_manifest.json",
+            "assets/samples/scenes/mine_tunnel_orbit.mp4",
             "scripts/launch_isaac_sim.sh",
             "scripts/setup_scene_phase1_env.sh",
             "scripts/run_scene_phase1.py",
@@ -48,6 +49,7 @@ class RepositoryLayoutTests(unittest.TestCase):
             "scripts/run_sam3d.py",
             "src/mining_asset_pipeline/agent/workflow.py",
             ".agents/skills/generate-mining-asset/SKILL.md",
+            ".agents/skills/generate-mining-scene/SKILL.md",
         ):
             self.assertTrue((ROOT / relative_path).is_file(), relative_path)
 
@@ -72,6 +74,10 @@ class RepositoryLayoutTests(unittest.TestCase):
         for item in manifest:
             self.assertTrue((ROOT / item["image"]).is_file(), item["image"])
             self.assertTrue(item["prompt"].strip())
+        scene_video = sample_root / "scenes" / "mine_tunnel_orbit.mp4"
+        self.assertGreater(scene_video.stat().st_size, 1_000_000)
+        self.assertIn("mine_tunnel_orbit.mp4", readme)
+        self.assertIn("Apache License 2.0", readme)
 
     def test_project_metadata_declares_runtime_and_optional_dependencies(self) -> None:
         metadata = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]
@@ -102,6 +108,44 @@ class RepositoryLayoutTests(unittest.TestCase):
         self.assertIn("description:", frontmatter)
         for reference in ("tool-contract.md", "quality-policy.md", "role-prompts.md"):
             self.assertTrue((canonical / "references" / reference).is_file())
+
+    def test_scene_skill_has_one_canonical_body_and_claude_discovery_link(self) -> None:
+        canonical = ROOT / ".agents" / "skills" / "generate-mining-scene"
+        claude = ROOT / ".claude" / "skills" / "generate-mining-scene"
+        self.assertTrue(canonical.is_dir())
+        self.assertTrue(claude.is_symlink())
+        self.assertEqual(claude.resolve(), canonical.resolve())
+        skill = (canonical / "SKILL.md").read_text(encoding="utf-8")
+        frontmatter = skill.split("---", 2)[1]
+        self.assertIn("name: generate-mining-scene", frontmatter)
+        self.assertIn("description:", frontmatter)
+        for reference in ("workflow-contract.md", "quality-policy.md"):
+            self.assertTrue((canonical / "references" / reference).is_file())
+        for script in (
+            "scripts/generate_marble_world.py",
+            "scripts/run_scene_phase1.py",
+            "scripts/record_scene_preview.py",
+        ):
+            self.assertIn(script, skill)
+        self.assertIn("--visual-mode full", skill)
+        self.assertIn("WORLDLABS_API_KEY", skill)
+        self.assertNotIn("scripts/run_pipeline.py", skill)
+        contract = (canonical / "references" / "workflow-contract.md").read_text(encoding="utf-8")
+        policy = (canonical / "references" / "quality-policy.md").read_text(encoding="utf-8")
+        for required_text in (
+            ".mp4",
+            ".mov",
+            ".mkv",
+            "--export-hq-mesh",
+            "scene.ply",
+            "pano.png",
+            "static_validation.json",
+            "--visual-mode full",
+            "WORLDLABS_API_KEY",
+        ):
+            self.assertIn(required_text, contract)
+        for required_text in ("phase1_verified", "degraded", "black", "blocked"):
+            self.assertIn(required_text, policy)
 
     def test_public_docs_do_not_contain_maintainer_absolute_path(self) -> None:
         public_files = [ROOT / "README.md", *(ROOT / "docs").rglob("*.md")]

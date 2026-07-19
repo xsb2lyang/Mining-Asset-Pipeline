@@ -32,7 +32,9 @@ adapter pads only the missing higher-order coefficients with zeros; geometry,
 opacity, DC colour, scale and rotation remain byte-equivalent after float16
 packing. This is the same layout as the historical working Real2Sim export.
 
-Runtime isolation is intentional:
+Runtime isolation is intentional. The default Skill path uses Marble's PLY
+through the fixed-SH NuRec compatibility adapter; request Marble's optional
+high-quality textured mesh only when its additional export cost is justified.
 
 | Runtime | Responsibility |
 |---|---|
@@ -142,14 +144,13 @@ Use `--camera-mode orbit` for an exterior overview, `--keep-frames` to retain
 the rendered PNGs, `--show-ui` to keep the Isaac Sim window visible, and
 `--overwrite` to replace an existing preview.
 
-The preferred Phase 1 output has a visible textured-mesh layer, so its default
-preview is color-faithful. The PLY compatibility path is also visible in Isaac
-Sim, but can only reproduce the colour and geometry information that Marble
-put in the PLY; a high-quality textured mesh remains preferable. If neither is
-available, pass the downloaded `pano.png`: the pipeline creates a visible,
-pano-projected collider mesh and records `quality: degraded` in the manifest.
-This final fallback is renderable and collision-aligned but has unavoidable
-single-panorama texture distortion.
+An explicitly requested high-quality textured mesh can be more color-faithful.
+The default PLY compatibility path is also visible in Isaac Sim, but can only
+reproduce the colour and geometry information that Marble put in the PLY. If
+neither is available, pass the downloaded `pano.png`: the pipeline creates a
+visible, pano-projected collider mesh and records `quality: degraded` in the
+manifest. This final fallback is renderable and collision-aligned but has
+unavoidable single-panorama texture distortion.
 
 ## Marble API boundary
 
@@ -172,14 +173,33 @@ export WORLDLABS_API_KEY='set-this-in-the-shell-only'
 python scripts/generate_marble_world.py \
   --video local_data/scene_inputs/tunnel_orbit.mp4 \
   --display-name "example mine tunnel" \
-  --prompt "A subterranean mine tunnel with a gravel pathway" \
-  --export-hq-mesh
+  --prompt "A subterranean mine tunnel with a gravel pathway"
 ```
 
-It writes `scene.ply`, `collider.glb`, `pano.png`, `textured_mesh.glb` and a credential-free
-manifest below `local_data/scene_inputs/marble/<world-id>/`. Pass the textured
-mesh and collider files to `run_scene_phase1.py`; the PLY is optional
-provenance. High-quality mesh export is a separate billable Marble operation.
+It writes `scene.ply`, `collider.glb`, `pano.png`, and a credential-free
+manifest below `local_data/scene_inputs/marble/<world-id>/`. Pass the PLY and
+collider files to `run_scene_phase1.py`. Add `--export-hq-mesh` only for an
+explicit high-quality-textured-mesh request; it is a separate billable Marble
+operation and then writes `textured_mesh.glb` too.
+
+## Versioned capture example
+
+The repository includes
+[`assets/samples/scenes/mine_tunnel_orbit.mp4`](../assets/samples/scenes/mine_tunnel_orbit.mp4),
+an Apache-2.0-licensed, 17 MB orbit-video input. It is intended as a capture
+reference and a real end-to-end input, not as a committed Marble result. After
+setting `WORLDLABS_API_KEY` in your shell, run the default non-HQ path:
+
+```bash
+python scripts/generate_marble_world.py \
+  --video assets/samples/scenes/mine_tunnel_orbit.mp4 \
+  --display-name "Subterranean mine tunnel"
+```
+
+For a session Agent, invoke `generate-mining-scene` with the same video. The
+Skill performs the equivalent acquisition, Phase 1 conversion, static report,
+and real preview checks. Generated downloads and `scene_outputs/` remain
+ignored local artifacts.
 
 When the high-quality mesh export is unavailable, produce a visible but
 degraded scene directly from the included panorama and collider:

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Generate Mining Scene"
+  short_description: "Turn panoramas or orbit videos into Phase 1 USD scenes"
+  default_prompt: "Use $generate-mining-scene to create a visible static Phase 1 USD scene from this orbit video or panorama."
