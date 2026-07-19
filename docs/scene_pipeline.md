@@ -70,9 +70,10 @@ Large inputs and generated scenes are intentionally ignored by Git:
 
 ```text
 local_data/scene_inputs/<scene_name>/
-├── textured_mesh.glb       # required visible scene mesh
+├── scene.ply               # default visible-scene input
 ├── collider.glb            # required physics mesh
-└── scene.ply               # PLY-only visual input, or provenance when a textured mesh exists
+├── pano.png                # optional visual fallback
+└── textured_mesh.glb       # optional, explicitly requested HQ visual input
 
 scene_outputs/<scene_name>/
 ├── manifest.json
@@ -99,20 +100,19 @@ the assembled stage or either packaged dependency is not metric.
 source environments/local.env
 
 python scripts/run_scene_phase1.py \
-  --visual-glb local_data/scene_inputs/example/textured_mesh.glb \
-  --collider-glb local_data/scene_inputs/example/collider.glb \
   --ply local_data/scene_inputs/example/scene.ply \
+  --collider-glb local_data/scene_inputs/example/collider.glb \
   --scene-name "example mine tunnel"
 ```
 
-If Marble did not provide `textured_mesh.glb`, provide its PLY instead. The
-orchestrator stages the PLY, runs the isolated compatibility transcoder, then
-packages the generated USDZ below `final/assets/visual/` using only relative
-references:
+The orchestrator stages the PLY, runs the isolated compatibility transcoder,
+then packages the generated USDZ below `final/assets/visual/` using only
+relative references. For an explicitly requested and successfully exported HQ
+mesh, use it instead of the PLY:
 
 ```bash
 python scripts/run_scene_phase1.py \
-  --ply local_data/scene_inputs/example/scene.ply \
+  --visual-glb local_data/scene_inputs/example/textured_mesh.glb \
   --collider-glb local_data/scene_inputs/example/collider.glb \
   --scene-name "example mine tunnel"
 ```
