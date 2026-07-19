@@ -1,11 +1,27 @@
-# Mining Asset Pipeline
+<div align="center">
 
-[English](README.md) | [简体中文](README.zh-CN.md)
+# ⛏️ Mining Asset Pipeline
 
-Generate a physics-authored USD asset from one RGB image and a text prompt.
-The project combines Meta SAM3, SAM 3D Objects, a bounded asset-quality agent,
-and NVIDIA Isaac Sim 5.1. It also includes an experimental Marble/WorldComposer
-path for building full-scene USD packages.
+### Visual inputs to portable, physics-authored USD
+
+[![Status: Experimental](https://img.shields.io/badge/status-experimental-7C3AED?style=flat-square)](CHANGELOG.md)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-2563EB?style=flat-square)](LICENSE)
+[![Isaac Sim](https://img.shields.io/badge/Isaac%20Sim-5.1-76B900?style=flat-square)](https://developer.nvidia.com/isaac/sim)
+[![Python](https://img.shields.io/badge/Python-3.11-3776AB?style=flat-square)](pyproject.toml)
+
+[English](README.md) · [简体中文](README.zh-CN.md)
+
+</div>
+
+> **From a single RGB image or an orbit video to a portable USD package.**
+> The asset path combines Meta SAM3, SAM 3D Objects, a bounded quality Agent,
+> and NVIDIA Isaac Sim 5.1. The scene path turns Marble exports into static
+> Real2Sim Phase 1 scene packages.
+
+```text
+RGB + prompt  ──► reviewed physics-authored asset USD
+Video/panorama ──► Marble + Phase 1 ──► portable scene USD
+```
 
 > **Project status:** experimental `v0.2.0`. The pipeline authors geometry,
 > rendering color, rigid-body, mass/density, collision, friction, restitution,

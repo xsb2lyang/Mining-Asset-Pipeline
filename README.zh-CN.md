@@ -1,10 +1,26 @@
-# Mining Asset Pipeline
+<div align="center">
 
-[English](README.md) | [简体中文](README.zh-CN.md)
+# ⛏️ Mining Asset Pipeline
 
-从一张 RGB 图片和文本提示词生成带基础物理属性的 USD 资产。项目结合了
-Meta SAM3、SAM 3D Objects、受限资产质量 Agent 与 NVIDIA Isaac Sim 5.1；同时
-提供从 World Labs Marble 输入创建完整场景 USD 包的 Phase 1 流程。
+### 从视觉输入到可移植、物理化的 USD
+
+[![Status: Experimental](https://img.shields.io/badge/status-experimental-7C3AED?style=flat-square)](CHANGELOG.md)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-2563EB?style=flat-square)](LICENSE)
+[![Isaac Sim](https://img.shields.io/badge/Isaac%20Sim-5.1-76B900?style=flat-square)](https://developer.nvidia.com/isaac/sim)
+[![Python](https://img.shields.io/badge/Python-3.11-3776AB?style=flat-square)](pyproject.toml)
+
+[English](README.md) · [简体中文](README.zh-CN.md)
+
+</div>
+
+> **从单张 RGB 图片或环绕视频，得到可移植的 USD 包。**
+> 资产路径结合 Meta SAM3、SAM 3D Objects、受限质量 Agent 和 NVIDIA Isaac
+> Sim 5.1；场景路径将 Marble 导出组装为静态 Real2Sim Phase 1 场景包。
+
+```text
+RGB + prompt  ──► 已审查、物理化的资产 USD
+视频/全景图    ──► Marble + Phase 1 ──► 可移植场景 USD
+```
 
 > **项目状态：** 实验性 `v0.2.0`。流程会写入几何、渲染颜色、刚体、质量/密度、
 > 碰撞、摩擦、弹性、阻尼与 CCD，并进行静态 USD 检查。动态落体、推挤和抓取验证
