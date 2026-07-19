@@ -32,7 +32,7 @@ RGB + prompt
 - Container-aware collision selection (`sdf`/`convexDecomposition`).
 - SAM3D vertex-color preservation through a USD Preview Surface.
 - Persistent manifests, inspection reports, tool logs, and physics-review records.
-- WorldComposer Real2Sim Phase 1: Marble PLY + collider GLB → portable scene USD.
+- Real2Sim Phase 1: Marble textured mesh + collider GLB → portable, renderable scene USD.
 
 ## Repository layout
 

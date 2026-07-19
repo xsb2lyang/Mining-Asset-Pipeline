@@ -25,9 +25,9 @@ an asset can be called task-certified or simulation-ready for a benchmark.
 The separate scene-generation path is:
 
 ```text
-Marble Gaussian PLY + collider GLB
-  → pinned 3dgrut NuRec transcoder
-  → pinned WorldComposer Phase 1 assembly under Isaac Sim
+Marble textured mesh GLB + collider GLB
+  → Isaac Sim material-preserving visual conversion
+  → separate visual/collision Phase 1 USD assembly
   → portable relative-reference USD package
   → static stage validation
 ```
@@ -51,8 +51,8 @@ Marble Gaussian PLY + collider GLB
 ## Dependency and data policy
 
 - **SAM3 and SAM3D Objects:** use Git submodules pinned to known commits.
-- **3dgrut and WorldComposer:** pinned submodules used only by the scene Phase 1
-  entry point. WorldComposer's missing upstream license is a release blocker,
+- **3dgrut and WorldComposer:** pinned submodules used for legacy and future scene
+  experiments. WorldComposer's missing upstream license is a release blocker,
   documented in `THIRD_PARTY_NOTICES.md`.
 - **Model checkpoints:** gated or large; download locally after explicit Hugging
   Face authentication. Never commit weights or tokens.

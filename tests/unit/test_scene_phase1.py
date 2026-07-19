@@ -134,6 +134,52 @@ class ScenePhase1Tests(unittest.TestCase):
             self.assertEqual(world_prompt["video_prompt"]["media_asset_id"], "media-123")
             self.assertTrue((root / "outputs" / "world-123" / "scene.ply").is_file())
 
+    def test_marble_existing_world_exports_textured_mesh_without_regeneration(self) -> None:
+        class Response:
+            def raise_for_status(self) -> None:
+                return None
+
+            def json(self) -> dict:
+                return {
+                    "operation_id": "mesh-export",
+                    "done": True,
+                    "response": {"url": "https://download/textured-mesh"},
+                }
+
+        class Session:
+            def __init__(self) -> None:
+                self.posts: list[tuple[str, dict]] = []
+
+            def post(self, url: str, **kwargs):
+                self.posts.append((url, kwargs.get("json", {})))
+                return Response()
+
+            def get(self, url: str, **kwargs):
+                del url, kwargs
+                return types.SimpleNamespace(
+                    raise_for_status=lambda: None,
+                    iter_content=lambda chunk_size: iter((b"mesh",)),
+                )
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            session = Session()
+            requests_module = types.SimpleNamespace(Session=lambda: session)
+            with patch.dict(marble.os.environ, {"WORLDLABS_API_KEY": "test-key"}, clear=True), patch.dict(
+                sys.modules, {"requests": requests_module}
+            ), contextlib.redirect_stdout(io.StringIO()):
+                result = marble.main(
+                    ["--world-id", "world-123", "--output-root", str(root / "outputs")]
+                )
+            self.assertEqual(result, 0)
+            self.assertEqual(len(session.posts), 1)
+            self.assertTrue(session.posts[0][0].endswith("worlds/world-123:export"))
+            self.assertEqual(
+                session.posts[0][1],
+                {"asset_type": "mesh", "format": "glb", "mesh_variant": "textured"},
+            )
+            self.assertTrue((root / "outputs" / "world-123" / "textured_mesh.glb").is_file())
+
     def test_slug_normalizes_a_semantic_scene_name(self) -> None:
         self.assertEqual(phase1._slug("Subterranean Tunnel / Phase 1"), "subterranean_tunnel_phase_1")
 
@@ -144,15 +190,17 @@ class ScenePhase1Tests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "must be a .ply"):
                 phase1._require_input(path, ".ply", "PLY")
 
-    def test_main_builds_nurec_and_portable_scene_commands(self) -> None:
+    def test_main_builds_renderable_scene_commands(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             ply = root / "scene source.ply"
-            glb = root / "collider source.glb"
+            visual_glb = root / "visual source.glb"
+            collider_glb = root / "collider source.glb"
             isaac = root / "isaac"
             output = root / "outputs"
             ply.write_bytes(b"ply")
-            glb.write_bytes(b"glb")
+            visual_glb.write_bytes(b"visual")
+            collider_glb.write_bytes(b"collider")
             isaac.mkdir()
             (isaac / "python.sh").write_text("#!/bin/sh\n", encoding="utf-8")
             commands: list[list[str]] = []
@@ -162,13 +210,14 @@ class ScenePhase1Tests(unittest.TestCase):
                 commands.append(command)
                 log_path.parent.mkdir(parents=True, exist_ok=True)
                 log_path.write_text("ok\n", encoding="utf-8")
-                if "threedgrut.export.scripts.transcode" in command:
-                    Path(command[command.index("-o") + 1]).write_bytes(b"usdz")
-                    return
-                mesh = Path(command[command.index("--mesh-usd") + 1])
+                visual = Path(command[command.index("--visual-usd") + 1])
+                collider = Path(command[command.index("--collider-usd") + 1])
                 scene = Path(command[command.index("--out-usd") + 1])
                 report = Path(command[command.index("--validation-report") + 1])
-                mesh.write_bytes(b"mesh")
+                visual.parent.mkdir(parents=True, exist_ok=True)
+                collider.parent.mkdir(parents=True, exist_ok=True)
+                visual.write_bytes(b"visual")
+                collider.write_bytes(b"collider")
                 scene.write_bytes(b"scene")
                 report.write_text(
                     json.dumps(
@@ -180,13 +229,12 @@ class ScenePhase1Tests(unittest.TestCase):
                     encoding="utf-8",
                 )
 
-            with patch.object(phase1.shutil, "which", return_value="/usr/bin/conda"), patch.object(
-                phase1, "_run", side_effect=fake_run
-            ), contextlib.redirect_stdout(io.StringIO()):
+            with patch.object(phase1, "_run", side_effect=fake_run), contextlib.redirect_stdout(io.StringIO()):
                 result = phase1.main(
                     [
                         "--ply", str(ply),
-                        "--glb", str(glb),
+                        "--visual-glb", str(visual_glb),
+                        "--collider-glb", str(collider_glb),
                         "--scene-name", "Test Tunnel",
                         "--output-root", str(output),
                         "--isaac-sim-path", str(isaac),
@@ -194,31 +242,35 @@ class ScenePhase1Tests(unittest.TestCase):
                 )
 
             self.assertEqual(result, 0)
-            self.assertIn("--format", commands[0])
-            self.assertEqual(commands[0][commands[0].index("--format") + 1], "nurec")
-            staged_glb = commands[1][commands[1].index("--glb") + 1]
-            self.assertEqual(Path(staged_glb).name, "test_tunnel_collider.glb")
+            self.assertEqual(len(commands), 1)
+            staged_visual = commands[0][commands[0].index("--visual-glb") + 1]
+            staged_collider = commands[0][commands[0].index("--collider-glb") + 1]
+            self.assertEqual(Path(staged_visual).name, "test_tunnel_visual.glb")
+            self.assertEqual(Path(staged_collider).name, "test_tunnel_collider.glb")
             manifest = json.loads((output / "test_tunnel" / "manifest.json").read_text(encoding="utf-8"))
             self.assertEqual(manifest["status"], "complete")
             self.assertEqual(manifest["artifacts"]["scene_usd"], "final/test_tunnel.usd")
+            self.assertEqual(manifest["parameters"]["visual_format"], "textured_mesh_glb")
 
     def test_existing_bundle_requires_force(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             ply = root / "scene.ply"
-            glb = root / "scene.glb"
+            visual_glb = root / "visual.glb"
+            collider_glb = root / "collider.glb"
             isaac = root / "isaac"
             output = root / "outputs" / "same_scene"
             ply.write_bytes(b"ply")
-            glb.write_bytes(b"glb")
+            visual_glb.write_bytes(b"visual")
+            collider_glb.write_bytes(b"collider")
             isaac.mkdir()
             (isaac / "python.sh").write_text("", encoding="utf-8")
             output.mkdir(parents=True)
-            with patch.object(phase1.shutil, "which", return_value="conda"), contextlib.redirect_stderr(io.StringIO()):
+            with contextlib.redirect_stderr(io.StringIO()):
                 result = phase1.main(
                     [
-                        "--ply", str(ply),
-                        "--glb", str(glb),
+                        "--visual-glb", str(visual_glb),
+                        "--collider-glb", str(collider_glb),
                         "--scene-name", "same scene",
                         "--output-root", str(root / "outputs"),
                         "--isaac-sim-path", str(isaac),

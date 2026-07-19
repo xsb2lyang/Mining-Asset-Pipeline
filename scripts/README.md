@@ -16,9 +16,9 @@ with Isaac Sim's `python.sh`, not the current conda Python.
 | `batch_pipeline.py` | Batch wrapper: JSON manifest → one independent USD asset per entry + summary JSON |
 | `doctor.py` | Check local packages, Conda environments, checkpoints, GPU tools, and Isaac Sim |
 | `setup_scene_phase1_env.sh` | Create the isolated, constrained 3dgrut transcoder environment |
-| `generate_marble_world.py` | Optional Marble API acquisition: RGB image or orbit video → PLY + collider GLB |
-| `run_scene_phase1.py` | Marble PLY + collider GLB → portable WorldComposer Phase 1 scene package |
-| `scene_phase1_isaac.py` | Internal Isaac Sim helper used by `run_scene_phase1.py` |
+| `generate_marble_world.py` | Optional Marble API acquisition: RGB image or orbit video → textured mesh + collider GLBs |
+| `run_scene_phase1.py` | Marble textured mesh + collider GLBs → renderable Phase 1 scene package |
+| `scene_phase1_isaac.py` | Internal Isaac Sim visual/collider assembly helper |
 | `record_scene_preview.py` | Render an automatic fly-through or orbit MP4 for a Phase 1 scene |
 
 Example:
@@ -56,8 +56,8 @@ For full-scene conversion, use only the public orchestrator:
 
 ```bash
 python scripts/run_scene_phase1.py \
-  --ply local_data/scene_inputs/example/scene.ply \
-  --glb local_data/scene_inputs/example/collider.glb \
+  --visual-glb local_data/scene_inputs/example/textured_mesh.glb \
+  --collider-glb local_data/scene_inputs/example/collider.glb \
   --scene-name "example tunnel"
 ```
 

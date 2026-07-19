@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
-"""Run the Isaac Sim half of WorldComposer Real2Sim Phase 1.
+"""Author the Isaac Sim half of a renderable Marble Phase 1 scene.
 
-This helper must be launched with Isaac Sim's ``python.sh``.  Gaussian PLY
-conversion is intentionally handled in a separate environment so 3dgrut does
-not have to be installed into Isaac Sim's Python runtime.
+Run with Isaac Sim's ``python.sh``.  The script deliberately creates separate
+visual and collision prims: a material-preserving textured GLB for rendering,
+and a geometry-only GLB for kinematic physics.  This is portable across Isaac
+Sim 5.1 installations and avoids the legacy NuRec visual dependency.
 """
 
 from __future__ import annotations
 
 import argparse
-import importlib.util
+import asyncio
 import json
 import os
 import shutil
@@ -17,23 +18,16 @@ import traceback
 from pathlib import Path
 
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
-WORLD_COMPOSER_SOURCE = REPO_ROOT / "third_party" / "WorldComposer" / "source" / "WorldComposer"
-
-
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Convert a scene GLB to USD and assemble it with a Gaussian USDZ."
+        description="Convert Marble visual/collider GLBs and assemble a renderable USD scene."
     )
-    parser.add_argument("--glb", type=Path, required=True)
-    parser.add_argument("--gaussian-usdz", type=Path, required=True)
-    parser.add_argument("--mesh-usd", type=Path, required=True)
+    parser.add_argument("--visual-glb", type=Path, required=True)
+    parser.add_argument("--collider-glb", type=Path, required=True)
+    parser.add_argument("--visual-usd", type=Path, required=True)
+    parser.add_argument("--collider-usd", type=Path, required=True)
     parser.add_argument("--out-usd", type=Path, required=True)
-    parser.add_argument(
-        "--validation-report",
-        type=Path,
-        help="Static validation JSON (default: next to --out-usd)",
-    )
+    parser.add_argument("--validation-report", type=Path)
     parser.add_argument("--scene-scale", type=float, default=1.0)
     parser.add_argument("--converter-timeout", type=float, default=300.0)
     return parser.parse_args()
@@ -46,170 +40,224 @@ def require_file(path: Path, label: str) -> Path:
     return resolved
 
 
+async def _convert_glb_to_usd(
+    glb: Path,
+    output: Path,
+    *,
+    preserve_materials: bool,
+    timeout: float,
+) -> None:
+    import omni.kit.asset_converter  # type: ignore
+
+    def progress_callback(progress: int, total_steps: int) -> int:
+        print(f"[AssetConverter] {glb.name}: {progress}/{total_steps}", flush=True)
+        return progress
+
+    output.parent.mkdir(parents=True, exist_ok=True)
+    if output.exists():
+        output.unlink()
+    context = omni.kit.asset_converter.AssetConverterContext()
+    context.ignore_materials = not preserve_materials
+    context.ignore_animations = True
+    context.ignore_cameras = True
+    context.ignore_lights = True
+    context.merge_all_meshes = not preserve_materials
+    context.use_meter_as_world_unit = True
+    # Marble GLBs contain texture images.  Embedding makes the visual USD
+    # self-contained instead of relying on transient export directories.
+    context.embed_textures = preserve_materials
+    manager = omni.kit.asset_converter.get_instance()
+    task = manager.create_converter_task(
+        glb.resolve().as_uri(), output.resolve().as_uri(), progress_callback, context
+    )
+    try:
+        success = await asyncio.wait_for(task.wait_until_finished(), timeout=timeout)
+    except asyncio.TimeoutError as exc:
+        raise TimeoutError(f"GLB -> USD conversion timed out after {timeout:.0f}s: {glb}") from exc
+    if not success or not output.is_file():
+        raise RuntimeError(f"GLB -> USD conversion failed: {glb} -> {output}")
+
+
+def _copy_tree(source: Path, destination: Path) -> None:
+    """Copy a USD component plus any texture sidecars produced by the converter."""
+    if destination.exists():
+        shutil.rmtree(destination)
+    shutil.copytree(source, destination)
+
+
+def _has_renderable_mesh(prim) -> bool:
+    from pxr import UsdGeom
+
+    return any(child.IsA(UsdGeom.Mesh) for child in UsdGeom.Imageable(prim).GetPrim().GetStage().Traverse() if child.GetPath().HasPrefix(prim.GetPath()))
+
+
+def _write_scene(
+    *,
+    out_usd: Path,
+    packaged_visual_usd: Path,
+    packaged_collider_usd: Path,
+    scene_scale: float,
+) -> None:
+    from pxr import Gf, Usd, UsdGeom, UsdPhysics
+
+    if out_usd.exists():
+        out_usd.unlink()
+    stage = Usd.Stage.CreateNew(str(out_usd))
+    UsdGeom.SetStageUpAxis(stage, UsdGeom.Tokens.z)
+    UsdGeom.SetStageMetersPerUnit(stage, 1.0)
+    world = UsdGeom.Xform.Define(stage, "/World")
+    stage.SetDefaultPrim(world.GetPrim())
+    scale = Gf.Vec3d(float(scene_scale), float(scene_scale), float(scene_scale))
+
+    visual = stage.DefinePrim("/World/Visual", "Xform")
+    visual.GetReferences().AddReference(str(packaged_visual_usd))
+    visual_xform = UsdGeom.Xformable(visual)
+    visual_xform.ClearXformOpOrder()
+    visual_xform.AddRotateXYZOp().Set(Gf.Vec3d(-90.0, 0.0, 0.0))
+    visual_xform.AddScaleOp().Set(scale)
+    UsdGeom.Imageable(visual).MakeVisible()
+
+    collider = stage.DefinePrim("/World/Collider", "Xform")
+    collider.GetReferences().AddReference(str(packaged_collider_usd))
+    collider_xform = UsdGeom.Xformable(collider)
+    collider_xform.ClearXformOpOrder()
+    collider_xform.AddRotateXYZOp().Set(Gf.Vec3d(-90.0, 0.0, 0.0))
+    collider_xform.AddScaleOp().Set(scale)
+    UsdGeom.Imageable(collider).MakeInvisible()
+    rigid = UsdPhysics.RigidBodyAPI.Apply(collider)
+    rigid.CreateKinematicEnabledAttr().Set(True)
+    UsdPhysics.CollisionAPI.Apply(collider)
+    collision = UsdPhysics.MeshCollisionAPI.Apply(collider)
+    collision.CreateApproximationAttr().Set("meshSimplification")
+    stage.Save()
+
+
 def main() -> int:
     args = parse_args()
-    glb = require_file(args.glb, "GLB")
-    gaussian_usdz = require_file(args.gaussian_usdz, "Gaussian USDZ")
-    mesh_usd = args.mesh_usd.expanduser().resolve()
+    visual_glb = require_file(args.visual_glb, "Visual GLB")
+    collider_glb = require_file(args.collider_glb, "Collider GLB")
+    visual_usd = args.visual_usd.expanduser().resolve()
+    collider_usd = args.collider_usd.expanduser().resolve()
     out_usd = args.out_usd.expanduser().resolve()
     validation_report = (
         args.validation_report.expanduser().resolve()
         if args.validation_report
         else out_usd.with_name("static_validation.json")
     )
-    mesh_usd.parent.mkdir(parents=True, exist_ok=True)
-    out_usd.parent.mkdir(parents=True, exist_ok=True)
-    validation_report.parent.mkdir(parents=True, exist_ok=True)
+    for path in (visual_usd.parent, collider_usd.parent, out_usd.parent, validation_report.parent):
+        path.mkdir(parents=True, exist_ok=True)
 
-    if not WORLD_COMPOSER_SOURCE.is_dir():
-        raise FileNotFoundError(
-            "WorldComposer submodule is unavailable; run "
-            "`git submodule update --init --recursive`."
-        )
-    assembler_path = (
-        WORLD_COMPOSER_SOURCE
-        / "WorldComposer"
-        / "real2sim"
-        / "scene_assembler.py"
-    )
-    spec = importlib.util.spec_from_file_location(
-        "_worldcomposer_scene_assembler", assembler_path
-    )
-    if spec is None or spec.loader is None:
-        raise ImportError(f"Cannot load WorldComposer assembler: {assembler_path}")
-    assembler = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(assembler)
-
-    # SimulationApp must start before pxr/Omniverse modules are imported.
     from isaacsim import SimulationApp
 
     simulation_app = SimulationApp({"headless": True})
     exit_code = 0
     try:
-        print(f"[phase1] converting GLB: {glb}", flush=True)
-        assembler.convert_glb_to_usd(
-            str(glb),
-            str(mesh_usd),
-            timeout_sec=args.converter_timeout,
-            simulation_app=simulation_app,
-        )
+        loop = asyncio.new_event_loop()
+        try:
+            asyncio.set_event_loop(loop)
+            print(f"[phase1] converting visible textured mesh: {visual_glb}", flush=True)
+            loop.run_until_complete(
+                _convert_glb_to_usd(
+                    visual_glb,
+                    visual_usd,
+                    preserve_materials=True,
+                    timeout=args.converter_timeout,
+                )
+            )
+            print(f"[phase1] converting physics collider: {collider_glb}", flush=True)
+            loop.run_until_complete(
+                _convert_glb_to_usd(
+                    collider_glb,
+                    collider_usd,
+                    preserve_materials=False,
+                    timeout=args.converter_timeout,
+                )
+            )
+        finally:
+            loop.close()
+            asyncio.set_event_loop(None)
 
-        # The final USD is a reference stage. Package both referenced files next
-        # to it so the complete final/ directory can be moved to another host.
+        # Package the complete visual component directory: Asset Converter may
+        # emit texture sidecars even when texture embedding is requested.
         assets_dir = out_usd.parent / "assets"
-        assets_dir.mkdir(parents=True, exist_ok=True)
-        packaged_mesh = assets_dir / mesh_usd.name
-        packaged_gaussian = assets_dir / gaussian_usdz.name
-        shutil.copy2(mesh_usd, packaged_mesh)
-        shutil.copy2(gaussian_usdz, packaged_gaussian)
-
-        print(f"[phase1] assembling scene: {out_usd}", flush=True)
-        assembler.align_mesh_to_usd(
-            str(out_usd),
-            str(packaged_gaussian),
-            str(packaged_mesh),
+        packaged_visual_dir = assets_dir / visual_usd.parent.name
+        packaged_collider_dir = assets_dir / collider_usd.parent.name
+        _copy_tree(visual_usd.parent, packaged_visual_dir)
+        _copy_tree(collider_usd.parent, packaged_collider_dir)
+        packaged_visual_usd = packaged_visual_dir / visual_usd.name
+        packaged_collider_usd = packaged_collider_dir / collider_usd.name
+        _write_scene(
+            out_usd=out_usd,
+            packaged_visual_usd=packaged_visual_usd,
+            packaged_collider_usd=packaged_collider_usd,
             scene_scale=args.scene_scale,
         )
+
         from pxr import Usd, UsdGeom, UsdPhysics, UsdUtils
 
         stage = Usd.Stage.Open(str(out_usd))
         if stage is None:
             raise RuntimeError(f"Unable to reopen assembled USD: {out_usd}")
-        # Both packaged inputs are authored in meters.  The WorldComposer
-        # helper creates a new root stage without linear-unit metadata, which
-        # OpenUSD interprets as centimetres (0.01 m/unit).  Author metres on
-        # the assembled root to preserve the source scene's physical scale.
-        UsdGeom.SetStageMetersPerUnit(stage, 1.0)
-        stage.GetRootLayer().Save()
         root_layer = stage.GetRootLayer()
         replacements = {
-            str(packaged_gaussian): packaged_gaussian.relative_to(out_usd.parent).as_posix(),
-            str(packaged_mesh): packaged_mesh.relative_to(out_usd.parent).as_posix(),
+            str(packaged_visual_usd): packaged_visual_usd.relative_to(out_usd.parent).as_posix(),
+            str(packaged_collider_usd): packaged_collider_usd.relative_to(out_usd.parent).as_posix(),
         }
-
-        def make_relative(asset_path: str) -> str:
-            return replacements.get(asset_path, asset_path)
-
-        UsdUtils.ModifyAssetPaths(root_layer, make_relative)
+        UsdUtils.ModifyAssetPaths(root_layer, lambda path: replacements.get(path, path))
         root_layer.Save()
-
         stage = Usd.Stage.Open(str(out_usd))
-        if stage is None:
-            raise RuntimeError(f"Unable to reopen assembled USD: {out_usd}")
-        external_paths: list[str] = []
+        visual = stage.GetPrimAtPath("/World/Visual")
+        collider = stage.GetPrimAtPath("/World/Collider")
+        references: list[str] = []
         for prim in stage.Traverse():
-            references = prim.GetMetadata("references")
-            if references:
-                external_paths.extend(
-                    item.assetPath for item in references.GetAddedOrExplicitItems()
-                )
-        absolute_paths = [path for path in external_paths if os.path.isabs(path)]
-        gauss_prim = stage.GetPrimAtPath("/World/gauss")
-        mesh_prim = stage.GetPrimAtPath("/World/Xform")
+            metadata = prim.GetMetadata("references")
+            if metadata:
+                references.extend(item.assetPath for item in metadata.GetAddedOrExplicitItems())
+        absolute_paths = [path for path in references if os.path.isabs(path)]
         component_units = {
-            "gaussian_usdz": UsdGeom.GetStageMetersPerUnit(
-                Usd.Stage.Open(str(packaged_gaussian))
-            ),
-            "mesh_usd": UsdGeom.GetStageMetersPerUnit(
-                Usd.Stage.Open(str(packaged_mesh))
-            ),
+            "visual_usd": UsdGeom.GetStageMetersPerUnit(Usd.Stage.Open(str(packaged_visual_usd))),
+            "collider_usd": UsdGeom.GetStageMetersPerUnit(Usd.Stage.Open(str(packaged_collider_usd))),
         }
         checks = {
             "meters_per_unit_is_meter": abs(UsdGeom.GetStageMetersPerUnit(stage) - 1.0) < 1e-9,
-            "component_units_are_meters": all(
-                abs(units - 1.0) < 1e-9 for units in component_units.values()
-            ),
+            "component_units_are_meters": all(abs(unit - 1.0) < 1e-9 for unit in component_units.values()),
             "default_prim_is_world": str(stage.GetDefaultPrim().GetPath()) == "/World",
-            "gaussian_prim_exists": gauss_prim.IsValid(),
-            "collider_prim_exists": mesh_prim.IsValid(),
-            "collider_is_invisible": (
-                mesh_prim.IsValid()
-                and UsdGeom.Imageable(mesh_prim).ComputeVisibility()
-                == UsdGeom.Tokens.invisible
-            ),
-            "collider_has_rigid_body": (
-                mesh_prim.IsValid() and mesh_prim.HasAPI(UsdPhysics.RigidBodyAPI)
-            ),
-            "collider_has_collision": (
-                mesh_prim.IsValid() and mesh_prim.HasAPI(UsdPhysics.CollisionAPI)
-            ),
+            "visual_prim_exists": visual.IsValid(),
+            "visual_is_visible": visual.IsValid() and UsdGeom.Imageable(visual).ComputeVisibility() == UsdGeom.Tokens.inherited,
+            "visual_has_renderable_mesh": visual.IsValid() and _has_renderable_mesh(visual),
+            "collider_prim_exists": collider.IsValid(),
+            "collider_is_invisible": collider.IsValid() and UsdGeom.Imageable(collider).ComputeVisibility() == UsdGeom.Tokens.invisible,
+            "collider_has_rigid_body": collider.IsValid() and collider.HasAPI(UsdPhysics.RigidBodyAPI),
+            "collider_has_collision": collider.IsValid() and collider.HasAPI(UsdPhysics.CollisionAPI),
             "references_are_relative": not absolute_paths,
-            "packaged_gaussian_exists": packaged_gaussian.is_file(),
-            "packaged_mesh_exists": packaged_mesh.is_file(),
+            "packaged_visual_exists": packaged_visual_usd.is_file(),
+            "packaged_collider_exists": packaged_collider_usd.is_file(),
         }
         report = {
-            "schema_version": 1,
+            "schema_version": 2,
             "passed": all(checks.values()),
             "stage": out_usd.name,
             "default_prim": str(stage.GetDefaultPrim().GetPath()),
             "meters_per_unit": UsdGeom.GetStageMetersPerUnit(stage),
             "component_meters_per_unit": component_units,
             "checks": checks,
-            "references": external_paths,
+            "references": references,
             "absolute_references": absolute_paths,
             "prim_count": sum(1 for _ in stage.Traverse()),
-            "limitations": [
-                "Static Phase 1 validation only; no dynamic simulation test was run."
-            ],
+            "limitations": ["Static Phase 1 validation only; no dynamic simulation test was run."],
         }
-        validation_report.write_text(
-            json.dumps(report, indent=2, ensure_ascii=False) + "\n",
-            encoding="utf-8",
-        )
+        validation_report.write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         if not report["passed"]:
             raise RuntimeError(f"Static validation failed: {validation_report}")
-    except BaseException:  # Isaac shutdown can otherwise hide buffered errors.
+    except BaseException:
         traceback.print_exc()
         exit_code = 1
     finally:
         simulation_app.close()
-
     if exit_code:
         return exit_code
-    if not mesh_usd.is_file() or not out_usd.is_file():
-        raise RuntimeError("WorldComposer Phase 1 did not create all expected USD files")
-
-    print(f"mesh_usd={mesh_usd}", flush=True)
+    print(f"visual_usd={visual_usd}", flush=True)
+    print(f"collider_usd={collider_usd}", flush=True)
     print(f"scene_usd={out_usd}", flush=True)
     print(f"validation_report={validation_report}", flush=True)
     return 0

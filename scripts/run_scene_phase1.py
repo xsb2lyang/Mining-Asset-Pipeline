@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Build a portable WorldComposer Real2Sim Phase 1 scene package.
+"""Build a portable, renderable Marble Phase 1 scene package for Isaac Sim.
 
-The orchestration process remains dependency-light.  It invokes 3dgrut in a
-dedicated Conda environment and the USD assembly helper with Isaac Sim's own
-Python runtime, preventing either dependency stack from polluting the main
-project environment.
+The visual mesh and the physics collider are authored as distinct USD layers:
+the textured mesh is visible, while the collider is invisible and kinematic.
+This deliberately avoids legacy NuRec payloads, which do not render reliably
+in the repository's Isaac Sim 5.1 target.
 """
 
 from __future__ import annotations
@@ -92,20 +92,30 @@ def _run(command: Sequence[str], *, env: dict[str, str], log_path: Path) -> None
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Convert Marble PLY + collider GLB into a portable Phase 1 USD scene."
+        description="Convert Marble textured mesh + collider GLB into a renderable Phase 1 USD scene."
     )
-    parser.add_argument("--ply", type=Path, required=True, help="Marble Gaussian-splat PLY")
-    parser.add_argument("--glb", type=Path, required=True, help="Marble collider mesh GLB")
+    parser.add_argument(
+        "--visual-glb",
+        type=Path,
+        required=True,
+        help="Marble high-quality textured mesh GLB (visible scene layer)",
+    )
+    parser.add_argument(
+        "--collider-glb",
+        type=Path,
+        required=True,
+        help="Marble collider mesh GLB (hidden kinematic collision layer)",
+    )
+    parser.add_argument(
+        "--ply",
+        type=Path,
+        help="Optional Marble Gaussian-splat PLY retained as provenance only",
+    )
     parser.add_argument("--scene-name", required=True, help="Semantic output name")
     parser.add_argument(
         "--output-root",
         type=Path,
         default=Path(os.environ.get("SCENE_OUTPUT_DIR", ROOT / "scene_outputs")),
-    )
-    parser.add_argument(
-        "--grut-env",
-        default=os.environ.get("THREEDGRUT_ENV", "worldcomposer-r2s"),
-        help="Conda environment containing the pinned 3dgrut dependencies",
     )
     parser.add_argument(
         "--isaac-sim-path",
@@ -130,8 +140,9 @@ def _require_input(path: Path, suffix: str, label: str) -> Path:
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
     try:
-        ply = _require_input(args.ply, ".ply", "PLY")
-        glb = _require_input(args.glb, ".glb", "GLB")
+        visual_glb = _require_input(args.visual_glb, ".glb", "Visual GLB")
+        collider_glb = _require_input(args.collider_glb, ".glb", "Collider GLB")
+        ply = _require_input(args.ply, ".ply", "PLY") if args.ply else None
         if args.scene_scale <= 0:
             raise ValueError("--scene-scale must be greater than zero")
         if not args.isaac_sim_path:
@@ -139,15 +150,6 @@ def main(argv: list[str] | None = None) -> int:
         isaac_python = args.isaac_sim_path.expanduser().resolve() / "python.sh"
         if not isaac_python.is_file():
             raise ValueError(f"Isaac Sim python.sh not found: {isaac_python}")
-        conda = shutil.which("conda")
-        if not conda:
-            raise ValueError("conda is not available on PATH")
-        grut = ROOT / "third_party" / "3dgrut"
-        worldcomposer = ROOT / "third_party" / "WorldComposer"
-        if not (grut / "threedgrut" / "export" / "scripts" / "transcode.py").is_file():
-            raise ValueError("3dgrut submodule is missing; initialize Git submodules")
-        if not (worldcomposer / "source" / "WorldComposer").is_dir():
-            raise ValueError("WorldComposer submodule is missing; initialize Git submodules")
     except ValueError as exc:
         print(f"Invalid Phase 1 request: {exc}", file=sys.stderr)
         return 2
@@ -166,10 +168,12 @@ def main(argv: list[str] | None = None) -> int:
     for directory in (staged_input, intermediate, final, logs):
         directory.mkdir(parents=True, exist_ok=True)
 
-    staged_glb = staged_input / f"{scene_slug}_collider.glb"
-    shutil.copy2(glb, staged_glb)
-    gaussian_usdz = intermediate / f"{scene_slug}_gaussian.usdz"
-    mesh_usd = intermediate / f"{scene_slug}_mesh.usd"
+    staged_visual_glb = staged_input / f"{scene_slug}_visual.glb"
+    staged_collider_glb = staged_input / f"{scene_slug}_collider.glb"
+    shutil.copy2(visual_glb, staged_visual_glb)
+    shutil.copy2(collider_glb, staged_collider_glb)
+    visual_usd = intermediate / "visual" / f"{scene_slug}_visual.usd"
+    collider_usd = intermediate / "collider" / f"{scene_slug}_collider.usd"
     scene_usd = final / f"{scene_slug}.usd"
     validation_report = final / "static_validation.json"
     manifest_path = bundle / "manifest.json"
@@ -181,44 +185,27 @@ def main(argv: list[str] | None = None) -> int:
         "scene_name": args.scene_name,
         "scene_slug": scene_slug,
         "inputs": {
-            "ply": {"path": str(ply), "sha256": _sha256(ply), "bytes": ply.stat().st_size},
-            "glb": {"path": str(glb), "sha256": _sha256(glb), "bytes": glb.stat().st_size},
+            "visual_glb": {
+                "path": str(visual_glb), "sha256": _sha256(visual_glb), "bytes": visual_glb.stat().st_size
+            },
+            "collider_glb": {
+                "path": str(collider_glb), "sha256": _sha256(collider_glb), "bytes": collider_glb.stat().st_size
+            },
         },
-        "parameters": {"scene_scale": args.scene_scale, "grut_format": "nurec"},
+        "parameters": {"scene_scale": args.scene_scale, "visual_format": "textured_mesh_glb"},
         "tools": {
-            "3dgrut_revision": _git_revision(grut),
-            "worldcomposer_revision": _git_revision(worldcomposer),
             "isaac_sim_path": str(args.isaac_sim_path.expanduser().resolve()),
-            "grut_env": args.grut_env,
         },
         "artifacts": {},
         "limitations": ["Phase 1 static assembly only; no dynamic simulation test was run."],
     }
+    if ply:
+        manifest["inputs"]["ply"] = {
+            "path": str(ply), "sha256": _sha256(ply), "bytes": ply.stat().st_size
+        }
     _write_json(manifest_path, manifest)
 
     try:
-        grut_env = os.environ.copy()
-        grut_env["PYTHONPATH"] = str(grut)
-        _run(
-            [
-                conda,
-                "run",
-                "-n",
-                args.grut_env,
-                "python",
-                "-m",
-                "threedgrut.export.scripts.transcode",
-                str(ply),
-                "-o",
-                str(gaussian_usdz),
-                "--format",
-                "nurec",
-                "--verbose",
-            ],
-            env=grut_env,
-            log_path=logs / "ply_to_usdz.log",
-        )
-
         isaac_env = os.environ.copy()
         for name in CLEAR_FOR_ISAAC:
             isaac_env.pop(name, None)
@@ -226,12 +213,14 @@ def main(argv: list[str] | None = None) -> int:
             [
                 str(isaac_python),
                 str(ROOT / "scripts" / "scene_phase1_isaac.py"),
-                "--glb",
-                str(staged_glb),
-                "--gaussian-usdz",
-                str(gaussian_usdz),
-                "--mesh-usd",
-                str(mesh_usd),
+                "--visual-glb",
+                str(staged_visual_glb),
+                "--collider-glb",
+                str(staged_collider_glb),
+                "--visual-usd",
+                str(visual_usd),
+                "--collider-usd",
+                str(collider_usd),
                 "--out-usd",
                 str(scene_usd),
                 "--validation-report",
@@ -250,9 +239,10 @@ def main(argv: list[str] | None = None) -> int:
         manifest["status"] = "complete"
         manifest["finished_at"] = _utc_now()
         manifest["artifacts"] = {
-            "staged_glb": str(staged_glb.relative_to(bundle)),
-            "gaussian_usdz": str(gaussian_usdz.relative_to(bundle)),
-            "mesh_usd": str(mesh_usd.relative_to(bundle)),
+            "staged_visual_glb": str(staged_visual_glb.relative_to(bundle)),
+            "staged_collider_glb": str(staged_collider_glb.relative_to(bundle)),
+            "visual_usd": str(visual_usd.relative_to(bundle)),
+            "collider_usd": str(collider_usd.relative_to(bundle)),
             "scene_usd": str(scene_usd.relative_to(bundle)),
             "validation_report": str(validation_report.relative_to(bundle)),
         }

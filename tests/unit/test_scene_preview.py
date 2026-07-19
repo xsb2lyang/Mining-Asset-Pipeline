@@ -17,6 +17,7 @@ class ScenePreviewTests(unittest.TestCase):
     def test_default_visual_mode_is_auto(self) -> None:
         args = preview._parse_args(["--scene", "scene.usd"])
         self.assertEqual(args.visual_mode, "auto")
+        self.assertEqual(args.bounds_prim, "/World/Collider")
         self.assertFalse(args.show_ui)
 
     def test_flythrough_moves_along_longest_horizontal_axis(self) -> None:

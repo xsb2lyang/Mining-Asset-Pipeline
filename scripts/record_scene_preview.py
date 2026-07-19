@@ -24,8 +24,8 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--scene", type=Path, required=True, help="Packaged scene USD to preview")
     parser.add_argument(
         "--bounds-prim",
-        default="/World/Xform",
-        help="Prim used to frame the automatic camera (default: /World/Xform)",
+        default="/World/Collider",
+        help="Prim used to frame the automatic camera (default: /World/Collider)",
     )
     parser.add_argument(
         "--output-dir",
@@ -186,10 +186,14 @@ def _configure_visual_mode(stage, requested_mode: str, has_nurec: bool) -> str:
     previous_target = stage.GetEditTarget()
     stage.SetEditTarget(Usd.EditTarget(stage.GetSessionLayer()))
     try:
-        visual = stage.GetPrimAtPath("/World/gauss")
+        visual = stage.GetPrimAtPath("/World/Visual")
+        if not visual.IsValid():
+            visual = stage.GetPrimAtPath("/World/gauss")  # Legacy NuRec bundle.
         if visual.IsValid():
             UsdGeom.Imageable(visual).MakeInvisible()
-        collider = stage.GetPrimAtPath("/World/Xform")
+        collider = stage.GetPrimAtPath("/World/Collider")
+        if not collider.IsValid():
+            collider = stage.GetPrimAtPath("/World/Xform")  # Legacy bundle.
         if collider.IsValid():
             UsdGeom.Imageable(collider).MakeVisible()
     finally:

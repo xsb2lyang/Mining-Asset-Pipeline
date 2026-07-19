@@ -8,37 +8,36 @@ USD scene package for Isaac Sim.
 
 ```text
 Marble world generation/export (optional Phase 0)
-  → Gaussian splat PLY + collider GLB
-  → 3dgrut PLY-to-NuRec conversion
-  → WorldComposer GLB-to-USD and aligned scene assembly
+  → textured mesh GLB + collider GLB (+ optional PLY provenance)
+  → material-preserving visual GLB-to-USD conversion
+  → separate visible visual layer and invisible kinematic collision layer
   → relative-reference packaging
   → static USD validation
   → final/<scene_name>.usd
 ```
 
-This is **WorldComposer Real2Sim Phase 1** only. A completed result contains a
-visible Gaussian reconstruction and an invisible, kinematic collider mesh. It
-has not passed dynamic collision, navigation, robot-task, or performance
+This is **Real2Sim Phase 1** only. A completed result contains a visible,
+textured mesh reconstruction and an invisible, kinematic collider mesh. It has
+not passed dynamic collision, navigation, robot-task, or performance
 validation.
 
-## Why two submodules and three runtimes
+## Runtime boundary
 
-`third_party/3dgrut` and `third_party/WorldComposer` are pinned Git submodules.
-The repository does not copy either upstream codebase. 3dgrut converts the PLY
-to the NuRec USDZ format consumed by Isaac Sim 5.1; WorldComposer supplies the
-alignment and scene-authoring behavior.
+`third_party/3dgrut` and `third_party/WorldComposer` remain pinned upstream
+submodules for historical experiments and future extensions. The renderable
+Phase 1 path does not use legacy NuRec: Isaac Sim 5.1 does not render that
+payload reliably. It converts Marble's high-quality textured mesh directly.
 
 Runtime isolation is intentional:
 
 | Runtime | Responsibility |
 |---|---|
-| Main Python 3.11 environment | Validation, orchestration, manifest and logs |
-| Conda `worldcomposer-r2s` | Pinned 3dgrut transcoder dependencies |
-| Isaac Sim 5.1 `python.sh` | GLB conversion, OpenUSD composition and validation |
+| Main Python 3.11 environment | Marble acquisition, orchestration, manifests and logs |
+| Isaac Sim 5.1 `python.sh` | Material-preserving GLB conversion, OpenUSD composition and validation |
 
-Do not install 3dgrut into Isaac Sim or run Isaac Sim from the Conda
-environment. The entry point clears Conda/CUDA Python environment variables
-before starting Kit.
+The entry point clears Conda/CUDA Python environment variables before starting
+Kit. A separate 3dgrut Conda environment is no longer required for the
+renderable Phase 1 path.
 
 ## Installation
 
@@ -46,21 +45,6 @@ Initialize the pinned upstream revisions:
 
 ```bash
 scripts/update_submodules.sh
-```
-
-Create the dedicated transcoder environment:
-
-```bash
-scripts/setup_scene_phase1_env.sh
-```
-
-The setup script installs the pinned 3dgrut source with compatibility
-constraints from `environments/scene_phase1_constraints.txt`. Set a different
-environment name before setup if required:
-
-```bash
-export THREEDGRUT_ENV=my-scene-env
-scripts/setup_scene_phase1_env.sh
 ```
 
 Copy and edit local paths:
@@ -78,20 +62,21 @@ Large inputs and generated scenes are intentionally ignored by Git:
 
 ```text
 local_data/scene_inputs/<scene_name>/
-├── scene.ply
-└── collider.glb
+├── textured_mesh.glb       # required visible scene mesh
+├── collider.glb            # required physics mesh
+└── scene.ply               # optional Marble provenance
 
 scene_outputs/<scene_name>/
 ├── manifest.json
-├── input/                  # normalized collider filename for Asset Converter
-├── intermediate/           # converted Gaussian and collider USD files
+├── input/                  # normalized visual and collider GLBs
+├── intermediate/           # converted visual and collider USD files
 ├── logs/                   # full 3dgrut and Isaac Sim logs
 └── final/
     ├── <scene_name>.usd
     ├── static_validation.json
     └── assets/
-        ├── <scene_name>_gaussian.usdz
-        └── <scene_name>_mesh.usd
+        ├── visual/<scene_name>_visual.usd
+        └── collider/<scene_name>_collider.usd
 ```
 
 Deliver the complete `final/` directory, not the root USD alone. The root USD
@@ -106,8 +91,9 @@ the assembled stage or either packaged dependency is not metric.
 source environments/local.env
 
 python scripts/run_scene_phase1.py \
+  --visual-glb local_data/scene_inputs/example/textured_mesh.glb \
+  --collider-glb local_data/scene_inputs/example/collider.glb \
   --ply local_data/scene_inputs/example/scene.ply \
-  --glb local_data/scene_inputs/example/collider.glb \
   --scene-name "example mine tunnel"
 ```
 
@@ -131,14 +117,10 @@ Use `--camera-mode orbit` for an exterior overview, `--keep-frames` to retain
 the rendered PNGs, `--show-ui` to keep the Isaac Sim window visible, and
 `--overwrite` to replace an existing preview.
 
-The current Phase 1 output uses a legacy NuRec Gaussian payload. Isaac Sim 5.1
-can compose and statically validate that payload, but its headless viewport
-capture is not reliable for NuRec rendering. The preview script therefore uses
-`--visual-mode auto` by default: it detects NuRec and records the visible
-collider geometry instead. This provides a dependable geometry/camera preview,
-not a color-faithful Gaussian rendering. Use `--visual-mode full` only on a
-runtime known to render NuRec successfully; no source USD is modified in either
-mode.
+The renderable Phase 1 output has a visible textured-mesh layer, so the default
+preview is color-faithful. `--visual-mode auto` still recognizes historical
+NuRec bundles and falls back to their collider for compatibility; new bundles
+should not need that fallback.
 
 ## Marble API boundary
 
@@ -161,12 +143,23 @@ export WORLDLABS_API_KEY='set-this-in-the-shell-only'
 python scripts/generate_marble_world.py \
   --video local_data/scene_inputs/tunnel_orbit.mp4 \
   --display-name "example mine tunnel" \
-  --prompt "A subterranean mine tunnel with a gravel pathway"
+  --prompt "A subterranean mine tunnel with a gravel pathway" \
+  --export-hq-mesh
 ```
 
-It writes `scene.ply`, `collider.glb` and a credential-free manifest below
-`local_data/scene_inputs/marble/<world-id>/`. Pass the first two files to
-`run_scene_phase1.py`; the API operation is not repeated during Phase 1.
+It writes `scene.ply`, `collider.glb`, `textured_mesh.glb` and a credential-free
+manifest below `local_data/scene_inputs/marble/<world-id>/`. Pass the textured
+mesh and collider files to `run_scene_phase1.py`; the PLY is optional
+provenance. High-quality mesh export is a separate billable Marble operation.
+
+For a world that was generated before this option existed, export only the
+missing visual mesh without regenerating the world:
+
+```bash
+python scripts/generate_marble_world.py \
+  --world-id <world-id> \
+  --output-root local_data/scene_inputs/marble
+```
 
 WorldComposer currently has no license file in its pinned upstream repository.
 Keeping it as a submodule preserves provenance but does not grant redistribution

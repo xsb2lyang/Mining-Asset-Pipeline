@@ -24,7 +24,10 @@ VIDEO_SUFFIXES = {".mp4", ".mov", ".mkv"}
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Generate a Marble world from an image or video and download PLY + collider GLB."
+        description=(
+            "Generate a Marble world from an image or video and download PLY, collider GLB, "
+            "and optionally a textured visual mesh GLB."
+        )
     )
     source_group = parser.add_mutually_exclusive_group(required=True)
     source_group.add_argument("--image", type=Path, help="Single RGB source image")
@@ -32,6 +35,13 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--video",
         type=Path,
         help="Orbit/camera-motion source video (.mp4, .mov, or .mkv)",
+    )
+    source_group.add_argument(
+        "--world-id",
+        help=(
+            "Reuse an existing Marble world. This does not generate a new world; "
+            "it only downloads the requested exports into --output-root/<world-id>."
+        ),
     )
     parser.add_argument(
         "--output-root",
@@ -65,6 +75,16 @@ def _source_from_args(args: argparse.Namespace) -> tuple[Path, str]:
         supported = ", ".join(sorted(VIDEO_SUFFIXES))
         raise ValueError(f"Video must use one of: {supported}")
     return source, kind
+
+
+def _existing_world_id(args: argparse.Namespace) -> str | None:
+    """Validate and return an existing-world request, if present."""
+    if not args.world_id:
+        return None
+    world_id = args.world_id.strip()
+    if not world_id:
+        raise ValueError("--world-id must not be empty")
+    return world_id
 
 
 def _media_asset_id(upload: dict[str, Any]) -> str:
@@ -171,7 +191,8 @@ def main(argv: list[str] | None = None) -> int:
         print("WORLDLABS_API_KEY is not set", file=sys.stderr)
         return 2
     try:
-        source, source_kind = _source_from_args(args)
+        existing_world_id = _existing_world_id(args)
+        source, source_kind = (None, None) if existing_world_id else _source_from_args(args)
     except (FileNotFoundError, ValueError) as exc:
         print(str(exc), file=sys.stderr)
         return 2
@@ -185,6 +206,36 @@ def main(argv: list[str] | None = None) -> int:
     auth_headers = {"WLT-Api-Key": api_key}
     session = requests.Session()
     try:
+        if existing_world_id:
+            output = args.output_root.expanduser().resolve() / existing_world_id
+            output.mkdir(parents=True, exist_ok=True)
+            textured_mesh = output / "textured_mesh.glb"
+            if textured_mesh.exists():
+                raise FileExistsError(
+                    f"Textured mesh already exists (refusing to replace): {textured_mesh}"
+                )
+            _export(
+                session,
+                world_id=existing_world_id,
+                payload={"asset_type": "mesh", "format": "glb", "mesh_variant": "textured"},
+                destination=textured_mesh,
+                headers=headers,
+                auth_headers=auth_headers,
+                args=args,
+                label="Textured mesh export",
+            )
+            manifest_path = output / "marble_manifest.json"
+            if manifest_path.is_file():
+                manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+                manifest.setdefault("artifacts", {})["textured_mesh_glb"] = "textured_mesh.glb"
+                manifest_path.write_text(
+                    json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+                )
+            print(f"world_id={existing_world_id}")
+            print(f"textured_mesh_glb={textured_mesh}")
+            return 0
+
+        assert source is not None and source_kind is not None
         prepare = session.post(
             f"{BASE_URL}/media-assets:prepare_upload",
             headers=headers,
@@ -286,6 +337,8 @@ def main(argv: list[str] | None = None) -> int:
             "ply_resolution": args.ply_resolution,
             "artifacts": {"ply": "scene.ply", "collider_glb": "collider.glb"},
         }
+        if args.export_hq_mesh:
+            manifest["artifacts"]["textured_mesh_glb"] = "textured_mesh.glb"
         (output / "marble_manifest.json").write_text(
             json.dumps(manifest, indent=2, ensure_ascii=False) + "\n",
             encoding="utf-8",

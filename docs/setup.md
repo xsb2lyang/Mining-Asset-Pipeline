@@ -9,7 +9,7 @@ model projects, 3dgrut and Isaac Sim have incompatible CUDA/Python requirements.
 | `.venv` | Orchestration, CLI, tests, optional LLM | Python 3.11 |
 | Conda `sam3` | Text-conditioned segmentation | Python 3.12; pinned SAM3 submodule |
 | Conda `sam3d-objects` | Single-image 3D reconstruction | Pinned upstream environment |
-| Conda `worldcomposer-r2s` | Optional scene PLY → NuRec transcoding | Pinned 3dgrut source |
+| Conda `worldcomposer-r2s` | Optional legacy scene PLY → NuRec experiments | Pinned 3dgrut source |
 | Isaac Sim `python.sh` | USD conversion and physics schemas | Isaac Sim 5.1 |
 
 ## 1. Hardware and operating system
@@ -101,9 +101,9 @@ cd ../..
 If installation fails, consult the pinned upstream document first; its build
 commands are authoritative for that submodule revision.
 
-## 6. Optional scene Phase 1 environment
+## 6. Optional legacy scene-transcoding environment
 
-Only users converting Marble PLY + collider GLB scenes need this environment:
+Only users reproducing the legacy Marble PLY/NuRec experiments need this environment:
 
 ```bash
 scripts/setup_scene_phase1_env.sh
