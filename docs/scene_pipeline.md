@@ -8,7 +8,7 @@ USD scene package for Isaac Sim.
 
 ```text
 Marble world generation/export (optional Phase 0)
-  → textured mesh GLB + collider GLB (+ pano PNG / optional PLY)
+  → full-resolution PLY + collider GLB (+ pano PNG / explicitly requested textured mesh GLB)
   → material-preserving visual GLB-to-USD conversion, or PLY → fixed-SH NuRec compatibility conversion
   → separate visible visual layer and invisible kinematic collision layer
   → relative-reference packaging
@@ -16,25 +16,23 @@ Marble world generation/export (optional Phase 0)
   → final/<scene_name>.usd
 ```
 
-This is **Real2Sim Phase 1** only. A completed result contains a visible,
-textured mesh reconstruction and an invisible, kinematic collider mesh. It has
-not passed dynamic collision, navigation, robot-task, or performance
-validation.
+This is **Real2Sim Phase 1** only. A completed result contains a visible
+reconstruction layer and an invisible, kinematic collider mesh. It has not
+passed dynamic collision, navigation, robot-task, or performance validation.
 
 ## Runtime boundary
 
 `third_party/3dgrut` and `third_party/WorldComposer` remain pinned upstream
-submodules. The preferred path uses Marble's high-quality textured mesh
-directly. When Marble only supplies a Gaussian PLY, Phase 1 uses a pinned
-NuRec compatibility adapter: Marble PLYs often contain DC colour only, while
-the Isaac Sim 5.1 NuRec renderer requires a fixed degree-3 SH tensor. The
+submodules. The default path uses Marble's full-resolution Gaussian PLY through
+a pinned NuRec compatibility adapter. Marble PLYs often contain DC colour only,
+while the Isaac Sim 5.1 NuRec renderer requires a fixed degree-3 SH tensor. The
 adapter pads only the missing higher-order coefficients with zeros; geometry,
 opacity, DC colour, scale and rotation remain byte-equivalent after float16
 packing. This is the same layout as the historical working Real2Sim export.
 
-Runtime isolation is intentional. The default Skill path uses Marble's PLY
-through the fixed-SH NuRec compatibility adapter; request Marble's optional
-high-quality textured mesh only when its additional export cost is justified.
+Runtime isolation is intentional. Request Marble's optional high-quality
+textured mesh only when the user explicitly asks for it and its additional
+export cost is justified.
 
 | Runtime | Responsibility |
 |---|---|
