@@ -8,7 +8,7 @@ USD scene package for Isaac Sim.
 
 ```text
 Marble world generation/export (optional Phase 0)
-  → textured mesh GLB + collider GLB (+ optional PLY provenance)
+  → textured mesh GLB + collider GLB (+ pano PNG / optional PLY provenance)
   → material-preserving visual GLB-to-USD conversion
   → separate visible visual layer and invisible kinematic collision layer
   → relative-reference packaging
@@ -117,10 +117,13 @@ Use `--camera-mode orbit` for an exterior overview, `--keep-frames` to retain
 the rendered PNGs, `--show-ui` to keep the Isaac Sim window visible, and
 `--overwrite` to replace an existing preview.
 
-The renderable Phase 1 output has a visible textured-mesh layer, so the default
-preview is color-faithful. `--visual-mode auto` still recognizes historical
-NuRec bundles and falls back to their collider for compatibility; new bundles
-should not need that fallback.
+The preferred Phase 1 output has a visible textured-mesh layer, so its default
+preview is color-faithful. If Marble's separate high-quality mesh export is
+unavailable, pass the downloaded `pano.png` instead: the pipeline creates a
+visible, pano-projected collider mesh and records `quality: degraded` in the
+manifest. This fallback is renderable and collision-aligned but has unavoidable
+single-panorama texture distortion. `--visual-mode auto` still recognizes
+historical NuRec bundles and falls back to their collider for compatibility.
 
 ## Marble API boundary
 
@@ -147,10 +150,20 @@ python scripts/generate_marble_world.py \
   --export-hq-mesh
 ```
 
-It writes `scene.ply`, `collider.glb`, `textured_mesh.glb` and a credential-free
+It writes `scene.ply`, `collider.glb`, `pano.png`, `textured_mesh.glb` and a credential-free
 manifest below `local_data/scene_inputs/marble/<world-id>/`. Pass the textured
 mesh and collider files to `run_scene_phase1.py`; the PLY is optional
 provenance. High-quality mesh export is a separate billable Marble operation.
+
+When the high-quality mesh export is unavailable, produce a visible but
+degraded scene directly from the included panorama and collider:
+
+```bash
+python scripts/run_scene_phase1.py \
+  --pano local_data/scene_inputs/marble/<world-id>/pano.png \
+  --collider-glb local_data/scene_inputs/marble/<world-id>/collider.glb \
+  --scene-name "example mine tunnel"
+```
 
 For a world that was generated before this option existed, export only the
 missing visual mesh without regenerating the world:

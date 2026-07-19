@@ -278,6 +278,49 @@ class ScenePhase1Tests(unittest.TestCase):
                 )
             self.assertEqual(result, 2)
 
+    def test_pano_fallback_is_forwarded_and_marked_degraded(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            pano = root / "pano.png"
+            collider = root / "collider.glb"
+            isaac = root / "isaac"
+            pano.write_bytes(b"png")
+            collider.write_bytes(b"glb")
+            isaac.mkdir()
+            (isaac / "python.sh").write_text("#!/bin/sh\n", encoding="utf-8")
+            commands: list[list[str]] = []
+
+            def fake_run(command, *, env, log_path):
+                del env
+                command = list(command)
+                commands.append(command)
+                log_path.parent.mkdir(parents=True, exist_ok=True)
+                log_path.write_text("ok\n", encoding="utf-8")
+                Path(command[command.index("--visual-usd") + 1]).parent.mkdir(parents=True, exist_ok=True)
+                Path(command[command.index("--visual-usd") + 1]).write_bytes(b"visual")
+                Path(command[command.index("--collider-usd") + 1]).parent.mkdir(parents=True, exist_ok=True)
+                Path(command[command.index("--collider-usd") + 1]).write_bytes(b"collider")
+                Path(command[command.index("--out-usd") + 1]).write_bytes(b"scene")
+                Path(command[command.index("--validation-report") + 1]).write_text(
+                    json.dumps({"passed": True}), encoding="utf-8"
+                )
+
+            with patch.object(phase1, "_run", side_effect=fake_run), contextlib.redirect_stdout(io.StringIO()):
+                result = phase1.main(
+                    [
+                        "--pano", str(pano),
+                        "--collider-glb", str(collider),
+                        "--scene-name", "pano scene",
+                        "--output-root", str(root / "outputs"),
+                        "--isaac-sim-path", str(isaac),
+                    ]
+                )
+            self.assertEqual(result, 0)
+            self.assertIn("--pano", commands[0])
+            manifest = json.loads((root / "outputs" / "pano_scene" / "manifest.json").read_text())
+            self.assertEqual(manifest["quality"], "degraded")
+            self.assertEqual(manifest["parameters"]["visual_format"], "pano_textured_collider_fallback")
+
 
 if __name__ == "__main__":
     unittest.main()

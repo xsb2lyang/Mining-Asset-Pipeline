@@ -3,8 +3,9 @@
 
 Run with Isaac Sim's ``python.sh``.  The script deliberately creates separate
 visual and collision prims: a material-preserving textured GLB for rendering,
-and a geometry-only GLB for kinematic physics.  This is portable across Isaac
-Sim 5.1 installations and avoids the legacy NuRec visual dependency.
+or a standard colored-point fallback from Marble's PLY, and a geometry-only
+GLB for kinematic physics. This is portable across Isaac Sim 5.1 installations
+and avoids the legacy NuRec visual dependency.
 """
 
 from __future__ import annotations
@@ -22,7 +23,10 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Convert Marble visual/collider GLBs and assemble a renderable USD scene."
     )
-    parser.add_argument("--visual-glb", type=Path, required=True)
+    visual_group = parser.add_mutually_exclusive_group(required=True)
+    visual_group.add_argument("--visual-glb", type=Path)
+    visual_group.add_argument("--ply", type=Path, help="Marble Gaussian-splat PLY fallback")
+    visual_group.add_argument("--pano", type=Path, help="Marble panorama PNG textured-collider fallback")
     parser.add_argument("--collider-glb", type=Path, required=True)
     parser.add_argument("--visual-usd", type=Path, required=True)
     parser.add_argument("--collider-usd", type=Path, required=True)
@@ -30,6 +34,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--validation-report", type=Path)
     parser.add_argument("--scene-scale", type=float, default=1.0)
     parser.add_argument("--converter-timeout", type=float, default=300.0)
+    parser.add_argument(
+        "--max-point-count",
+        type=int,
+        default=500_000,
+        help="Maximum sampled points for a standard USD point-cloud fallback (default: 500000)",
+    )
     return parser.parse_args()
 
 
@@ -85,10 +95,156 @@ def _copy_tree(source: Path, destination: Path) -> None:
     shutil.copytree(source, destination)
 
 
-def _has_renderable_mesh(prim) -> bool:
+def _has_renderable_geometry(prim) -> bool:
     from pxr import UsdGeom
 
-    return any(child.IsA(UsdGeom.Mesh) for child in UsdGeom.Imageable(prim).GetPrim().GetStage().Traverse() if child.GetPath().HasPrefix(prim.GetPath()))
+    return any(
+        child.IsA(UsdGeom.Mesh) or child.IsA(UsdGeom.Points)
+        for child in prim.GetStage().Traverse()
+        if child.GetPath().HasPrefix(prim.GetPath())
+    )
+
+
+def _read_binary_gaussian_ply(ply: Path, max_point_count: int):
+    """Read Marble's binary Gaussian PLY and return sampled positions/colors.
+
+    Marble PLY stores the DC spherical-harmonic coefficient, not direct RGB.
+    The conversion below is the standard 3D Gaussian Splatting DC decode:
+    ``rgb = 0.5 + C0 * f_dc``.  Standard ``UsdGeom.Points`` has no anisotropic
+    Gaussian parameters, so this is explicitly a colored, lower-fidelity
+    fallback rather than an attempt to reproduce the splat renderer.
+    """
+    import numpy as np
+
+    if max_point_count <= 0:
+        raise ValueError("--max-point-count must be positive")
+    header = bytearray()
+    with ply.open("rb") as stream:
+        while True:
+            line = stream.readline()
+            if not line:
+                raise ValueError(f"PLY header is incomplete: {ply}")
+            header.extend(line)
+            if line == b"end_header\n":
+                break
+    lines = header.decode("ascii", "replace").splitlines()
+    if "format binary_little_endian 1.0" not in lines:
+        raise ValueError(f"Only binary_little_endian PLY is supported: {ply}")
+    vertex_line = next((line for line in lines if line.startswith("element vertex ")), None)
+    if vertex_line is None:
+        raise ValueError(f"PLY contains no vertex element: {ply}")
+    vertex_count = int(vertex_line.rsplit(" ", 1)[1])
+    required = ("x", "y", "z", "f_dc_0", "f_dc_1", "f_dc_2", "opacity", "scale_0", "scale_1", "scale_2")
+    names = [line.split(" ")[-1] for line in lines if line.startswith("property float ")]
+    missing = sorted(set(required).difference(names))
+    if missing:
+        raise ValueError(f"PLY lacks Marble Gaussian attributes: {', '.join(missing)}")
+    dtype = np.dtype([(name, "<f4") for name in names])
+    values = np.fromfile(ply, dtype=dtype, count=vertex_count, offset=len(header))
+    if len(values) != vertex_count:
+        raise ValueError(f"PLY is truncated: expected {vertex_count} vertices, read {len(values)}")
+    indices = np.linspace(0, vertex_count - 1, min(vertex_count, max_point_count), dtype=np.int64)
+    values = values[indices]
+    points = np.column_stack((values["x"], values["y"], values["z"])).astype(np.float32)
+    dc = np.column_stack((values["f_dc_0"], values["f_dc_1"], values["f_dc_2"])).astype(np.float32)
+    colors = np.clip(0.5 + 0.28209479177387814 * dc, 0.0, 1.0)
+    opacity = 1.0 / (1.0 + np.exp(-np.clip(values["opacity"], -20.0, 20.0)))
+    radii = 2.0 * np.exp(np.clip(np.max(
+        np.column_stack((values["scale_0"], values["scale_1"], values["scale_2"])), axis=1
+    ), -12.0, 0.0))
+    widths = np.clip(radii, 0.002, 0.15).astype(np.float32)
+    return points, colors.astype(np.float32), opacity.astype(np.float32), widths
+
+
+def _convert_gaussian_ply_to_points_usd(ply: Path, output: Path, max_point_count: int) -> int:
+    """Write a portable colored-point USD visual fallback from a Marble PLY."""
+    from pxr import Usd, UsdGeom, Vt
+
+    points, colors, opacity, widths = _read_binary_gaussian_ply(ply, max_point_count)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    if output.exists():
+        output.unlink()
+    stage = Usd.Stage.CreateNew(str(output))
+    UsdGeom.SetStageUpAxis(stage, UsdGeom.Tokens.z)
+    UsdGeom.SetStageMetersPerUnit(stage, 1.0)
+    root = UsdGeom.Xform.Define(stage, "/PointCloud")
+    stage.SetDefaultPrim(root.GetPrim())
+    cloud = UsdGeom.Points.Define(stage, "/PointCloud/Points")
+    cloud.CreatePointsAttr().Set(Vt.Vec3fArray.FromNumpy(points))
+    cloud.CreateWidthsAttr().Set(Vt.FloatArray.FromNumpy(widths))
+    cloud.CreateDisplayColorPrimvar(UsdGeom.Tokens.vertex).Set(Vt.Vec3fArray.FromNumpy(colors))
+    cloud.CreateDisplayOpacityPrimvar(UsdGeom.Tokens.vertex).Set(Vt.FloatArray.FromNumpy(opacity))
+    stage.Save()
+    return len(points)
+
+
+def _convert_collider_to_pano_visual_usd(
+    collider_glb: Path, output: Path, pano: Path, timeout: float
+) -> None:
+    """Create a colored visual fallback by spherical-projecting Marble's pano.
+
+    This is intentionally marked degraded: one panorama cannot provide the
+    full view-dependent texture fidelity of Marble's exported HQ mesh. It is,
+    however, a conventional textured USD mesh that Isaac Sim 5.1 renders.
+    """
+    from pxr import Sdf, Usd, UsdGeom, UsdShade, Vt
+    import numpy as np
+
+    asyncio.get_event_loop().run_until_complete(
+        _convert_glb_to_usd(collider_glb, output, preserve_materials=False, timeout=timeout)
+    )
+    shutil.copy2(pano, output.parent / pano.name)
+    stage = Usd.Stage.Open(str(output))
+    if stage is None:
+        raise RuntimeError(f"Unable to reopen converted visual fallback: {output}")
+    root = stage.GetDefaultPrim()
+    if not root.IsValid():
+        raise RuntimeError(f"Converted visual fallback has no default prim: {output}")
+    looks_path = root.GetPath().AppendPath("Looks/PanoramaFallback")
+    material = UsdShade.Material.Define(stage, looks_path)
+    shader = UsdShade.Shader.Define(stage, looks_path.AppendPath("PreviewSurface"))
+    shader.CreateIdAttr("UsdPreviewSurface")
+    texture = UsdShade.Shader.Define(stage, looks_path.AppendPath("PanoTexture"))
+    texture.CreateIdAttr("UsdUVTexture")
+    texture.CreateInput("file", Sdf.ValueTypeNames.Asset).Set(Sdf.AssetPath(pano.name))
+    reader = UsdShade.Shader.Define(stage, looks_path.AppendPath("StReader"))
+    reader.CreateIdAttr("UsdPrimvarReader_float2")
+    reader.CreateInput("varname", Sdf.ValueTypeNames.Token).Set("st")
+    texture.CreateInput("st", Sdf.ValueTypeNames.Float2).ConnectToSource(reader.ConnectableAPI(), "result")
+    # A single Marble pano is already exposure-baked. Use it as emission so a
+    # bright Isaac dome light does not wash the fallback into an almost-white
+    # diffuse surface.
+    shader.CreateInput("diffuseColor", Sdf.ValueTypeNames.Color3f).Set((0.0, 0.0, 0.0))
+    shader.CreateInput("emissiveColor", Sdf.ValueTypeNames.Color3f).ConnectToSource(
+        texture.ConnectableAPI(), "rgb"
+    )
+    material.CreateSurfaceOutput().ConnectToSource(shader.ConnectableAPI(), "surface")
+    bound = 0
+    for prim in stage.Traverse():
+        if not prim.IsA(UsdGeom.Mesh):
+            continue
+        mesh = UsdGeom.Mesh(prim)
+        points = np.asarray(mesh.GetPointsAttr().Get(), dtype=np.float32)
+        if len(points) == 0:
+            continue
+        centered = points - points.mean(axis=0, keepdims=True)
+        radius = np.linalg.norm(centered, axis=1)
+        radius = np.maximum(radius, 1e-6)
+        # Equirectangular pano mapping. The source GLB and PLY share Marble's
+        # local frame, so this preserves broad color/layout cues.
+        u = 0.5 + np.arctan2(centered[:, 0], centered[:, 2]) / (2.0 * np.pi)
+        v = 0.5 - np.arcsin(np.clip(centered[:, 1] / radius, -1.0, 1.0)) / np.pi
+        st = np.column_stack((u, v)).astype(np.float32)
+        UsdGeom.PrimvarsAPI(mesh).CreatePrimvar(
+            "st", Sdf.ValueTypeNames.TexCoord2fArray, UsdGeom.Tokens.vertex
+        ).Set(
+            Vt.Vec2fArray.FromNumpy(st)
+        )
+        UsdShade.MaterialBindingAPI(mesh).Bind(material)
+        bound += 1
+    if not bound:
+        raise RuntimeError("Converted collider contains no mesh for panorama fallback")
+    stage.GetRootLayer().Save()
 
 
 def _write_scene(
@@ -134,7 +290,9 @@ def _write_scene(
 
 def main() -> int:
     args = parse_args()
-    visual_glb = require_file(args.visual_glb, "Visual GLB")
+    visual_glb = require_file(args.visual_glb, "Visual GLB") if args.visual_glb else None
+    ply = require_file(args.ply, "Marble PLY") if args.ply else None
+    pano = require_file(args.pano, "Marble panorama") if args.pano else None
     collider_glb = require_file(args.collider_glb, "Collider GLB")
     visual_usd = args.visual_usd.expanduser().resolve()
     collider_usd = args.collider_usd.expanduser().resolve()
@@ -155,15 +313,32 @@ def main() -> int:
         loop = asyncio.new_event_loop()
         try:
             asyncio.set_event_loop(loop)
-            print(f"[phase1] converting visible textured mesh: {visual_glb}", flush=True)
-            loop.run_until_complete(
-                _convert_glb_to_usd(
-                    visual_glb,
-                    visual_usd,
-                    preserve_materials=True,
-                    timeout=args.converter_timeout,
+            if visual_glb:
+                print(f"[phase1] converting visible textured mesh: {visual_glb}", flush=True)
+                loop.run_until_complete(
+                    _convert_glb_to_usd(
+                        visual_glb,
+                        visual_usd,
+                        preserve_materials=True,
+                        timeout=args.converter_timeout,
+                    )
                 )
-            )
+                visual_representation = "textured_mesh"
+                visual_point_count = None
+            elif pano:
+                print(f"[phase1] projecting Marble pano onto collider fallback: {pano}", flush=True)
+                _convert_collider_to_pano_visual_usd(
+                    collider_glb, visual_usd, pano, args.converter_timeout
+                )
+                visual_representation = "pano_textured_collider_fallback"
+                visual_point_count = None
+            else:
+                assert ply is not None
+                print(f"[phase1] converting Marble PLY to colored USD points: {ply}", flush=True)
+                visual_point_count = _convert_gaussian_ply_to_points_usd(
+                    ply, visual_usd, args.max_point_count
+                )
+                visual_representation = "colored_point_cloud_fallback"
             print(f"[phase1] converting physics collider: {collider_glb}", flush=True)
             loop.run_until_complete(
                 _convert_glb_to_usd(
@@ -224,7 +399,7 @@ def main() -> int:
             "default_prim_is_world": str(stage.GetDefaultPrim().GetPath()) == "/World",
             "visual_prim_exists": visual.IsValid(),
             "visual_is_visible": visual.IsValid() and UsdGeom.Imageable(visual).ComputeVisibility() == UsdGeom.Tokens.inherited,
-            "visual_has_renderable_mesh": visual.IsValid() and _has_renderable_mesh(visual),
+            "visual_has_renderable_geometry": visual.IsValid() and _has_renderable_geometry(visual),
             "collider_prim_exists": collider.IsValid(),
             "collider_is_invisible": collider.IsValid() and UsdGeom.Imageable(collider).ComputeVisibility() == UsdGeom.Tokens.invisible,
             "collider_has_rigid_body": collider.IsValid() and collider.HasAPI(UsdPhysics.RigidBodyAPI),
@@ -244,6 +419,8 @@ def main() -> int:
             "references": references,
             "absolute_references": absolute_paths,
             "prim_count": sum(1 for _ in stage.Traverse()),
+            "visual_representation": visual_representation,
+            "visual_point_count": visual_point_count,
             "limitations": ["Static Phase 1 validation only; no dynamic simulation test was run."],
         }
         validation_report.write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")

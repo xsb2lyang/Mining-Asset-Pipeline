@@ -97,8 +97,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--visual-glb",
         type=Path,
-        required=True,
-        help="Marble high-quality textured mesh GLB (visible scene layer)",
+        help="Marble high-quality textured mesh GLB (preferred visible scene layer)",
     )
     parser.add_argument(
         "--collider-glb",
@@ -109,7 +108,15 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--ply",
         type=Path,
-        help="Optional Marble Gaussian-splat PLY retained as provenance only",
+        help=(
+            "Marble Gaussian-splat PLY. Used as a colored standard-USD point-cloud visual fallback "
+            "when --visual-glb is unavailable; otherwise retained as provenance."
+        ),
+    )
+    parser.add_argument(
+        "--pano",
+        type=Path,
+        help="Optional Marble panorama PNG for the textured-collider visual fallback",
     )
     parser.add_argument("--scene-name", required=True, help="Semantic output name")
     parser.add_argument(
@@ -140,9 +147,12 @@ def _require_input(path: Path, suffix: str, label: str) -> Path:
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
     try:
-        visual_glb = _require_input(args.visual_glb, ".glb", "Visual GLB")
+        visual_glb = _require_input(args.visual_glb, ".glb", "Visual GLB") if args.visual_glb else None
         collider_glb = _require_input(args.collider_glb, ".glb", "Collider GLB")
         ply = _require_input(args.ply, ".ply", "PLY") if args.ply else None
+        pano = _require_input(args.pano, ".png", "Panorama") if args.pano else None
+        if visual_glb is None and ply is None and pano is None:
+            raise ValueError("Provide --visual-glb, --pano, or --ply for the visible scene layer")
         if args.scene_scale <= 0:
             raise ValueError("--scene-scale must be greater than zero")
         if not args.isaac_sim_path:
@@ -168,9 +178,10 @@ def main(argv: list[str] | None = None) -> int:
     for directory in (staged_input, intermediate, final, logs):
         directory.mkdir(parents=True, exist_ok=True)
 
-    staged_visual_glb = staged_input / f"{scene_slug}_visual.glb"
+    staged_visual_glb = staged_input / f"{scene_slug}_visual.glb" if visual_glb else None
     staged_collider_glb = staged_input / f"{scene_slug}_collider.glb"
-    shutil.copy2(visual_glb, staged_visual_glb)
+    if visual_glb and staged_visual_glb:
+        shutil.copy2(visual_glb, staged_visual_glb)
     shutil.copy2(collider_glb, staged_collider_glb)
     visual_usd = intermediate / "visual" / f"{scene_slug}_visual.usd"
     collider_usd = intermediate / "collider" / f"{scene_slug}_collider.usd"
@@ -185,23 +196,37 @@ def main(argv: list[str] | None = None) -> int:
         "scene_name": args.scene_name,
         "scene_slug": scene_slug,
         "inputs": {
-            "visual_glb": {
-                "path": str(visual_glb), "sha256": _sha256(visual_glb), "bytes": visual_glb.stat().st_size
-            },
             "collider_glb": {
                 "path": str(collider_glb), "sha256": _sha256(collider_glb), "bytes": collider_glb.stat().st_size
             },
         },
-        "parameters": {"scene_scale": args.scene_scale, "visual_format": "textured_mesh_glb"},
+        "parameters": {
+            "scene_scale": args.scene_scale,
+            "visual_format": (
+                "textured_mesh_glb"
+                if visual_glb
+                else "pano_textured_collider_fallback"
+                if pano
+                else "colored_point_cloud_fallback"
+            ),
+        },
         "tools": {
             "isaac_sim_path": str(args.isaac_sim_path.expanduser().resolve()),
         },
         "artifacts": {},
         "limitations": ["Phase 1 static assembly only; no dynamic simulation test was run."],
     }
+    if visual_glb:
+        manifest["inputs"]["visual_glb"] = {
+            "path": str(visual_glb), "sha256": _sha256(visual_glb), "bytes": visual_glb.stat().st_size
+        }
     if ply:
         manifest["inputs"]["ply"] = {
             "path": str(ply), "sha256": _sha256(ply), "bytes": ply.stat().st_size
+        }
+    if pano:
+        manifest["inputs"]["pano"] = {
+            "path": str(pano), "sha256": _sha256(pano), "bytes": pano.stat().st_size
         }
     _write_json(manifest_path, manifest)
 
@@ -209,43 +234,44 @@ def main(argv: list[str] | None = None) -> int:
         isaac_env = os.environ.copy()
         for name in CLEAR_FOR_ISAAC:
             isaac_env.pop(name, None)
-        _run(
-            [
-                str(isaac_python),
-                str(ROOT / "scripts" / "scene_phase1_isaac.py"),
-                "--visual-glb",
-                str(staged_visual_glb),
-                "--collider-glb",
-                str(staged_collider_glb),
-                "--visual-usd",
-                str(visual_usd),
-                "--collider-usd",
-                str(collider_usd),
-                "--out-usd",
-                str(scene_usd),
-                "--validation-report",
-                str(validation_report),
-                "--scene-scale",
-                str(args.scene_scale),
-                "--converter-timeout",
-                str(args.converter_timeout),
-            ],
-            env=isaac_env,
-            log_path=logs / "isaac_assembly.log",
-        )
+        command = [
+            str(isaac_python),
+            str(ROOT / "scripts" / "scene_phase1_isaac.py"),
+            "--collider-glb", str(staged_collider_glb),
+            "--visual-usd", str(visual_usd),
+            "--collider-usd", str(collider_usd),
+            "--out-usd", str(scene_usd),
+            "--validation-report", str(validation_report),
+            "--scene-scale", str(args.scene_scale),
+            "--converter-timeout", str(args.converter_timeout),
+        ]
+        if staged_visual_glb:
+            command.extend(["--visual-glb", str(staged_visual_glb)])
+        elif pano:
+            command.extend(["--pano", str(pano)])
+        else:
+            assert ply is not None
+            command.extend(["--ply", str(ply)])
+        _run(command, env=isaac_env, log_path=logs / "isaac_assembly.log")
         validation = json.loads(validation_report.read_text(encoding="utf-8"))
         if not validation.get("passed"):
             raise RuntimeError(f"Static validation did not pass: {validation_report}")
         manifest["status"] = "complete"
         manifest["finished_at"] = _utc_now()
         manifest["artifacts"] = {
-            "staged_visual_glb": str(staged_visual_glb.relative_to(bundle)),
             "staged_collider_glb": str(staged_collider_glb.relative_to(bundle)),
             "visual_usd": str(visual_usd.relative_to(bundle)),
             "collider_usd": str(collider_usd.relative_to(bundle)),
             "scene_usd": str(scene_usd.relative_to(bundle)),
             "validation_report": str(validation_report.relative_to(bundle)),
         }
+        if staged_visual_glb:
+            manifest["artifacts"]["staged_visual_glb"] = str(staged_visual_glb.relative_to(bundle))
+        else:
+            manifest["quality"] = "degraded"
+            manifest["limitations"].append(
+                "Visual layer is a fallback, not Marble's high-quality textured mesh export."
+            )
         _write_json(manifest_path, manifest)
     except Exception as exc:  # noqa: BLE001 - persist all external-tool failures.
         manifest["status"] = "failed"
