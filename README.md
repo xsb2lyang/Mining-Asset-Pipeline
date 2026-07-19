@@ -93,7 +93,8 @@ output package and current validation boundary.
 
 - Linux x86-64 (validated on Ubuntu 22.04).
 - Python 3.11 for the orchestration environment.
-- Conda or Mamba; SAM3 and SAM3D use isolated upstream environments.
+- Conda for SAM3, plus Mamba for the pinned upstream SAM3D setup; both models
+  use isolated environments.
 - NVIDIA GPU and driver. SAM 3D Objects upstream recommends at least 32 GB VRAM.
 - NVIDIA Isaac Sim 5.1 installed locally.
 - Access to the gated SAM3 and SAM 3D Objects checkpoints on Hugging Face.
@@ -108,7 +109,7 @@ the stored manifest and validation reports define the reproducibility boundary.
 
 ```bash
 git clone --recurse-submodules <repository-url>
-cd mining-asset-pipeline
+cd Mining-Asset-Pipeline
 ```
 
 For an existing clone:

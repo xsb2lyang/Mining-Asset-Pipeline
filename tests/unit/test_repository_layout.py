@@ -153,6 +153,20 @@ class RepositoryLayoutTests(unittest.TestCase):
         for path in public_files:
             self.assertNotIn("/home/user/Xsb_WS", path.read_text(encoding="utf-8"), str(path))
 
+    def test_fresh_clone_and_scene_skill_contracts_are_not_stale(self) -> None:
+        public_setup = "\n".join(
+            (ROOT / path).read_text(encoding="utf-8")
+            for path in ("README.md", "README.zh-CN.md", "docs/setup.md")
+        )
+        self.assertIn("cd Mining-Asset-Pipeline", public_setup)
+        self.assertNotIn("cd mining-asset-pipeline", public_setup)
+        self.assertIn("mamba", public_setup.lower())
+        contract = (
+            ROOT / ".agents" / "skills" / "generate-mining-scene" / "references" / "workflow-contract.md"
+        ).read_text(encoding="utf-8")
+        self.assertIn("threedgrut.export.usd.nurec.exporter", contract)
+        self.assertIn("--output-dir", contract)
+
     def test_relative_markdown_links_resolve(self) -> None:
         markdown_files = [
             ROOT / "README.md",

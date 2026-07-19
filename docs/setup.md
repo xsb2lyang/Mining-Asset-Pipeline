@@ -28,11 +28,11 @@ the validated path because Isaac Sim and GPU rendering add additional limits.
 
 ```bash
 git clone --recurse-submodules <repository-url>
-cd mining-asset-pipeline
+cd Mining-Asset-Pipeline
 git submodule status
 ```
 
-Both lines from `git submodule status` must begin with a space, not `-` or `+`.
+All four lines from `git submodule status` must begin with a space, not `-` or `+`.
 For an existing clone:
 
 ```bash
@@ -84,6 +84,12 @@ submodule itself; keeping it pristine preserves reproducibility.
 
 Use the exact instructions at
 [`third_party/sam-3d-objects/doc/setup.md`](../third_party/sam-3d-objects/doc/setup.md):
+They use Mamba. If it is not already available alongside Conda, install it
+before following the upstream commands:
+
+```bash
+conda install -n base -c conda-forge mamba
+```
 
 ```bash
 cd third_party/sam-3d-objects

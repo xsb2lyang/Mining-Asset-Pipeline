@@ -13,6 +13,8 @@ test -n "${ISAAC_SIM_PATH:-}" && test -x "$ISAAC_SIM_PATH/python.sh"
 command -v conda
 conda run -n "${THREEDGRUT_ENV:-worldcomposer-r2s}" python -c "import torch"
 test -d third_party/3dgrut
+PYTHONPATH=third_party/3dgrut conda run -n "${THREEDGRUT_ENV:-worldcomposer-r2s}" \
+  python -c "from threedgrut.export.adapter import AttributesExportAdapter; from threedgrut.export.importers.ply import PLYImporter; from threedgrut.export.usd.nurec.exporter import NuRecExporter"
 ```
 
 If a check fails, stop and return only the relevant repair instruction:
@@ -20,7 +22,7 @@ If a check fails, stop and return only the relevant repair instruction:
 - Missing key: set `WORLDLABS_API_KEY` in the shell that launches the Agent; do not place it in repository files.
 - Missing `requests`: `python -m pip install -e '.[scene]'`
 - Missing Isaac Sim path: `export ISAAC_SIM_PATH=/absolute/path/to/isaac-sim-5.1.0`
-- Missing `worldcomposer-r2s` or `3dgrut`: `bash scripts/setup_scene_phase1_env.sh`
+- Missing `worldcomposer-r2s`, 3dgrut, or its NuRec exporter: `bash scripts/setup_scene_phase1_env.sh`
 
 Do not automatically execute any repair command.
 
@@ -82,7 +84,7 @@ After static validation passes, use Isaac Sim's Python launcher, always retain f
 ```bash
 "$ISAAC_SIM_PATH/python.sh" scripts/record_scene_preview.py \
   --scene scene_outputs/<actual-scene-name>/final/<actual-scene-name>.usd \
-  --output scene_outputs/<actual-scene-name>/preview.mp4 \
+  --output-dir scene_outputs/<actual-scene-name>/final/preview \
   --camera-mode flythrough \
   --visual-mode full \
   --frames 48 --fps 12 --keep-frames --overwrite

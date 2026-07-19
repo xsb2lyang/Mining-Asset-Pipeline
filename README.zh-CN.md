@@ -83,7 +83,7 @@ RGB + prompt
 
 - Linux x86-64（已在 Ubuntu 22.04 验证）。
 - 编排环境使用 Python 3.11。
-- Conda 或 Mamba；SAM3 与 SAM3D 使用独立的上游环境。
+- SAM3 需要 Conda；固定的上游 SAM3D 安装步骤还需要 Mamba；两者均使用独立环境。
 - NVIDIA GPU 与相应驱动；SAM 3D Objects 上游建议至少 32 GB 显存。
 - 本地安装 NVIDIA Isaac Sim 5.1。
 - 资产流程需要能访问 Hugging Face 上受限的 SAM3 和 SAM 3D Objects 权重。
@@ -97,7 +97,7 @@ RGB + prompt
 
 ```bash
 git clone --recurse-submodules <repository-url>
-cd mining-asset-pipeline
+cd Mining-Asset-Pipeline
 ```
 
 已有 clone 时运行：
