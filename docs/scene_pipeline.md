@@ -149,13 +149,19 @@ API credential must come only from `WORLDLABS_API_KEY` in the process
 environment and must never appear in config files, manifests, logs, tests or
 commits.
 
-The supported optional acquisition command is:
+The supported optional acquisition command accepts either one RGB image or one
+local orbit video. Marble supports `.mp4`, `.mov`, and `.mkv` video inputs.
+For an orbit video, keep the target near the frame centre, make one slow,
+continuous circuit, and avoid cuts or motion blur:
 
 ```bash
 python -m pip install -e '.[scene]'
 export WORLDLABS_API_KEY='set-this-in-the-shell-only'
 
-python scripts/generate_marble_world.py --image local_data/rgb_inputs/tunnel.jpg
+python scripts/generate_marble_world.py \
+  --video local_data/scene_inputs/tunnel_orbit.mp4 \
+  --display-name "example mine tunnel" \
+  --prompt "A subterranean mine tunnel with a gravel pathway"
 ```
 
 It writes `scene.ply`, `collider.glb` and a credential-free manifest below

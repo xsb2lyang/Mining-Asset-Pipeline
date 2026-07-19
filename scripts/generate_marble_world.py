@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate a Marble world and download inputs for scene Phase 1.
+"""Generate a Marble world from an RGB image or an orbit video.
 
 This optional acquisition step is deliberately separate from
 ``run_scene_phase1.py``: users may instead supply PLY/GLB exports made on a
@@ -19,19 +19,30 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 BASE_URL = "https://api.worldlabs.ai/marble/v1"
+VIDEO_SUFFIXES = {".mp4", ".mov", ".mkv"}
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Generate a Marble world and download PLY + collider GLB inputs."
+        description="Generate a Marble world from an image or video and download PLY + collider GLB."
     )
-    parser.add_argument("--image", type=Path, required=True)
+    source_group = parser.add_mutually_exclusive_group(required=True)
+    source_group.add_argument("--image", type=Path, help="Single RGB source image")
+    source_group.add_argument(
+        "--video",
+        type=Path,
+        help="Orbit/camera-motion source video (.mp4, .mov, or .mkv)",
+    )
     parser.add_argument(
         "--output-root",
         type=Path,
         default=ROOT / "local_data" / "scene_inputs" / "marble",
     )
     parser.add_argument("--display-name", default="Mining Scene")
+    parser.add_argument(
+        "--prompt",
+        help="Optional text guidance; Marble captions the source automatically when omitted",
+    )
     parser.add_argument("--model", default="marble-1.1-plus")
     parser.add_argument(
         "--ply-resolution",
@@ -42,6 +53,40 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--poll-interval", type=float, default=20.0)
     parser.add_argument("--operation-timeout", type=float, default=7200.0)
     return parser.parse_args(argv)
+
+
+def _source_from_args(args: argparse.Namespace) -> tuple[Path, str]:
+    """Return the local source file and Marble media kind."""
+    source = (args.video or args.image).expanduser().resolve()
+    kind = "video" if args.video else "image"
+    if not source.is_file():
+        raise FileNotFoundError(f"{kind.capitalize()} not found: {source}")
+    if kind == "video" and source.suffix.lower() not in VIDEO_SUFFIXES:
+        supported = ", ".join(sorted(VIDEO_SUFFIXES))
+        raise ValueError(f"Video must use one of: {supported}")
+    return source, kind
+
+
+def _media_asset_id(upload: dict[str, Any]) -> str:
+    """Accept both documented and legacy media-asset ID response shapes."""
+    media_asset = upload.get("media_asset", {})
+    identifier = media_asset.get("id") or media_asset.get("media_asset_id")
+    if not isinstance(identifier, str) or not identifier:
+        raise RuntimeError("Marble upload response does not contain a media asset ID")
+    return identifier
+
+
+def _world_prompt(kind: str, media_asset_id: str, text_prompt: str | None) -> dict[str, Any]:
+    prompt: dict[str, Any] = {
+        "type": kind,
+        f"{kind}_prompt": {
+            "source": "media_asset",
+            "media_asset_id": media_asset_id,
+        },
+    }
+    if text_prompt and text_prompt.strip():
+        prompt["text_prompt"] = text_prompt.strip()
+    return prompt
 
 
 def _wait_for_operation(
@@ -125,9 +170,10 @@ def main(argv: list[str] | None = None) -> int:
     if not api_key:
         print("WORLDLABS_API_KEY is not set", file=sys.stderr)
         return 2
-    image = args.image.expanduser().resolve()
-    if not image.is_file():
-        print(f"Image not found: {image}", file=sys.stderr)
+    try:
+        source, source_kind = _source_from_args(args)
+    except (FileNotFoundError, ValueError) as exc:
+        print(str(exc), file=sys.stderr)
         return 2
     try:
         import requests
@@ -143,16 +189,16 @@ def main(argv: list[str] | None = None) -> int:
             f"{BASE_URL}/media-assets:prepare_upload",
             headers=headers,
             json={
-                "file_name": image.name,
-                "kind": "image",
-                "extension": image.suffix.lower().lstrip("."),
+                "file_name": source.name,
+                "kind": source_kind,
+                "extension": source.suffix.lower().lstrip("."),
             },
             timeout=60,
         )
         prepare.raise_for_status()
         upload = prepare.json()
-        media_asset_id = upload["media_asset"]["media_asset_id"]
-        with image.open("rb") as stream:
+        media_asset_id = _media_asset_id(upload)
+        with source.open("rb") as stream:
             uploaded = session.put(
                 upload["upload_info"]["upload_url"],
                 headers=upload["upload_info"]["required_headers"],
@@ -167,13 +213,7 @@ def main(argv: list[str] | None = None) -> int:
             json={
                 "display_name": args.display_name,
                 "model": args.model,
-                "world_prompt": {
-                    "type": "image",
-                    "image_prompt": {
-                        "source": "media_asset",
-                        "media_asset_id": media_asset_id,
-                    },
-                },
+                "world_prompt": _world_prompt(source_kind, media_asset_id, args.prompt),
             },
             timeout=60,
         )
@@ -235,13 +275,14 @@ def main(argv: list[str] | None = None) -> int:
             )
 
         manifest = {
-            "schema_version": 1,
+            "schema_version": 2,
             "provider": "world_labs_marble",
             "world_id": str(world_id),
             "operation_id": operation["operation_id"],
             "model": args.model,
             "display_name": args.display_name,
-            "source_image": str(image),
+            "source": {"kind": source_kind, "path": str(source)},
+            "prompt": args.prompt.strip() if args.prompt and args.prompt.strip() else None,
             "ply_resolution": args.ply_resolution,
             "artifacts": {"ply": "scene.ply", "collider_glb": "collider.glb"},
         }

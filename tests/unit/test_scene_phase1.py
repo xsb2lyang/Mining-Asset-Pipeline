@@ -7,6 +7,7 @@ import io
 import json
 import sys
 import tempfile
+import types
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -23,6 +24,115 @@ class ScenePhase1Tests(unittest.TestCase):
     def test_marble_client_requires_environment_key(self) -> None:
         with patch.dict(marble.os.environ, {}, clear=True), contextlib.redirect_stderr(io.StringIO()):
             self.assertEqual(marble.main(["--image", "unused.jpg"]), 2)
+
+    def test_marble_video_prompt_uses_official_video_shape(self) -> None:
+        prompt = marble._world_prompt("video", "media-123", "  an underground mine tunnel  ")
+        self.assertEqual(prompt["type"], "video")
+        self.assertEqual(prompt["video_prompt"]["source"], "media_asset")
+        self.assertEqual(prompt["video_prompt"]["media_asset_id"], "media-123")
+        self.assertEqual(prompt["text_prompt"], "an underground mine tunnel")
+
+    def test_marble_media_asset_id_accepts_documented_and_legacy_fields(self) -> None:
+        self.assertEqual(marble._media_asset_id({"media_asset": {"id": "current"}}), "current")
+        self.assertEqual(
+            marble._media_asset_id({"media_asset": {"media_asset_id": "legacy"}}), "legacy"
+        )
+
+    def test_marble_rejects_unsupported_video_suffix(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            source = Path(temporary) / "orbit.avi"
+            source.write_bytes(b"video")
+            args = marble._parse_args(["--video", str(source)])
+            with self.assertRaisesRegex(ValueError, "Video must use one of"):
+                marble._source_from_args(args)
+
+    def test_marble_video_run_uploads_and_generates_with_video_prompt(self) -> None:
+        class Response:
+            def __init__(self, payload: dict | None = None, content: bytes = b"") -> None:
+                self.payload = payload or {}
+                self.content = content
+
+            def raise_for_status(self) -> None:
+                return None
+
+            def json(self) -> dict:
+                return self.payload
+
+            def iter_content(self, chunk_size: int):
+                del chunk_size
+                yield self.content
+
+        class Session:
+            def __init__(self) -> None:
+                self.posts: list[tuple[str, dict]] = []
+
+            def post(self, url: str, **kwargs):
+                self.posts.append((url, kwargs.get("json", {})))
+                if url.endswith("media-assets:prepare_upload"):
+                    return Response(
+                        {
+                            "media_asset": {"id": "media-123"},
+                            "upload_info": {
+                                "upload_url": "https://upload.example/video",
+                                "required_headers": {"x-upload": "yes"},
+                            },
+                        }
+                    )
+                if url.endswith("worlds:generate"):
+                    return Response(
+                        {
+                            "operation_id": "world-operation",
+                            "done": True,
+                            "response": {
+                                "id": "world-123",
+                                "assets": {"mesh": {"collider_mesh_url": "https://download/collider"}},
+                            },
+                        }
+                    )
+                if url.endswith(":export"):
+                    return Response(
+                        {
+                            "operation_id": "export-operation",
+                            "done": True,
+                            "response": {"url": "https://download/scene"},
+                        }
+                    )
+                raise AssertionError(url)
+
+            def put(self, url: str, **kwargs):
+                del url, kwargs
+                return Response()
+
+            def get(self, url: str, **kwargs):
+                del url, kwargs
+                return Response(content=b"artifact")
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            video = root / "orbit.mp4"
+            video.write_bytes(b"video")
+            session = Session()
+            requests_module = types.SimpleNamespace(Session=lambda: session)
+            with patch.dict(marble.os.environ, {"WORLDLABS_API_KEY": "test-key"}, clear=True), patch.dict(
+                sys.modules, {"requests": requests_module}
+            ), contextlib.redirect_stdout(io.StringIO()):
+                result = marble.main(
+                    [
+                        "--video",
+                        str(video),
+                        "--prompt",
+                        "mine tunnel",
+                        "--output-root",
+                        str(root / "outputs"),
+                    ]
+                )
+
+            self.assertEqual(result, 0)
+            self.assertEqual(session.posts[0][1]["kind"], "video")
+            world_prompt = session.posts[1][1]["world_prompt"]
+            self.assertEqual(world_prompt["type"], "video")
+            self.assertEqual(world_prompt["video_prompt"]["media_asset_id"], "media-123")
+            self.assertTrue((root / "outputs" / "world-123" / "scene.ply").is_file())
 
     def test_slug_normalizes_a_semantic_scene_name(self) -> None:
         self.assertEqual(phase1._slug("Subterranean Tunnel / Phase 1"), "subterranean_tunnel_phase_1")

@@ -16,7 +16,7 @@ with Isaac Sim's `python.sh`, not the current conda Python.
 | `batch_pipeline.py` | Batch wrapper: JSON manifest → one independent USD asset per entry + summary JSON |
 | `doctor.py` | Check local packages, Conda environments, checkpoints, GPU tools, and Isaac Sim |
 | `setup_scene_phase1_env.sh` | Create the isolated, constrained 3dgrut transcoder environment |
-| `generate_marble_world.py` | Optional Marble API acquisition: RGB → PLY + collider GLB |
+| `generate_marble_world.py` | Optional Marble API acquisition: RGB image or orbit video → PLY + collider GLB |
 | `run_scene_phase1.py` | Marble PLY + collider GLB → portable WorldComposer Phase 1 scene package |
 | `scene_phase1_isaac.py` | Internal Isaac Sim helper used by `run_scene_phase1.py` |
 | `record_scene_preview.py` | Render an automatic fly-through or orbit MP4 for a Phase 1 scene |
